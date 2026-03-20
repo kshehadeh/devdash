@@ -1,0 +1,71 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600&display=swap");
+@import "tailwindcss";
+
+:root {
+  --surface: #0b1326;
+  --surface-container-lowest: #060e20;
+  --surface-container-low: #131b2e;
+  --surface-container: #171f33;
+  --surface-container-high: #222a3d;
+  --surface-container-highest: #2d3449;
+  --surface-bright: #31394d;
+  --on-surface: #dae2fd;
+  --on-surface-variant: #c1c6d7;
+  --primary: #a7c8ff;
+  --primary-container: #3291ff;
+  --on-primary: #003061;
+  --secondary: #b7c8e1;
+  --secondary-container: #3a4a5f;
+  --tertiary: #ffb695;
+  --tertiary-container: #ef6719;
+  --outline: #8b90a0;
+  --outline-variant: #414754;
+  --error: #ffb4ab;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--surface);
+  color: var(--on-surface);
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.font-label {
+  font-family: "Manrope", sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-container-low);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--outline-variant);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--outline);
+}

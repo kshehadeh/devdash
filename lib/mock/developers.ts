@@ -1,0 +1,328 @@
+import type { Developer, DeveloperStats } from "../types";
+
+function generateCommitHistory() {
+  const days: { date: string; count: number }[] = [];
+  const now = new Date();
+  for (let i = 364; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    const base = isWeekend ? 0 : Math.random() > 0.25 ? Math.floor(Math.random() * 8) + 1 : 0;
+    days.push({ date: dateStr, count: base });
+  }
+  return days;
+}
+
+export const developers: Developer[] = [
+  {
+    id: "dev-1",
+    name: "Alex Chen",
+    avatar: "AC",
+    role: "Senior Frontend Engineer",
+    team: "Ateliers",
+  },
+  {
+    id: "dev-2",
+    name: "Jordan Rivera",
+    avatar: "JR",
+    role: "Backend Engineer",
+    team: "Platform",
+  },
+  {
+    id: "dev-3",
+    name: "Sam Patel",
+    avatar: "SP",
+    role: "Full Stack Engineer",
+    team: "Commerce",
+  },
+  {
+    id: "dev-4",
+    name: "Morgan Lee",
+    avatar: "ML",
+    role: "Staff Engineer",
+    team: "Infrastructure",
+  },
+];
+
+export const developerStats: Record<string, DeveloperStats> = {
+  "dev-1": {
+    developer: developers[0],
+    lookbackDays: 30,
+    velocity: 142,
+    velocityChange: 12,
+    mergeRatio: 94,
+    workloadHealth: 8.2,
+    ticketVelocity: 12,
+    docAuthorityLevel: 4,
+    commitsYTD: 2481,
+    commitHistory: generateCommitHistory(),
+    pullRequests: [
+      {
+        id: "pr-1",
+        title: "feat: implement atomic-design-system-v2",
+        repo: "ateliers/frontend-core",
+        number: 412,
+        status: "merged",
+        timeAgo: "2h ago",
+      },
+      {
+        id: "pr-2",
+        title: "fix: websocket-latency-spike-on-edge",
+        repo: "ateliers/api-gateway",
+        number: 389,
+        status: "open",
+        reviewCount: 3,
+        timeAgo: "Active now",
+        isActive: true,
+      },
+      {
+        id: "pr-3",
+        title: "refactor: legacy-auth-handler-removal",
+        repo: "ateliers/auth-service",
+        number: 355,
+        status: "closed",
+        timeAgo: "Yesterday",
+      },
+    ],
+    jiraTickets: [],
+    sprint: {
+      name: "Nebula v4.2",
+      currentDay: 8,
+      totalDays: 14,
+      status: "on_track",
+      cycleTime: 4.2,
+      throughput: 18,
+      overdueCount: 0,
+      issues: [
+        {
+          id: "i-1",
+          key: "NEB-1042",
+          title: "Critical buffer overflow in stream processor",
+          status: "in_progress",
+          points: 8,
+          priority: "critical",
+        },
+        {
+          id: "i-2",
+          key: "NEB-1055",
+          title: "Optimize React re-renders on dashboard canvas",
+          status: "done",
+          points: 5,
+          priority: "medium",
+        },
+        {
+          id: "i-3",
+          key: "NEB-1061",
+          title: "Unit tests for payment-gateway adapter",
+          status: "todo",
+          points: 3,
+          priority: "low",
+        },
+      ],
+    },
+    confluenceDocs: [
+      { title: "Micro-frontend Architecture Guidelines", reads: 1200, edits: 42 },
+      { title: "API Authentication Flow v3.0", reads: 840, edits: 12 },
+      { title: "Incident Post-Mortem: Jan 12 Outage", reads: 620, edits: 4 },
+    ],
+    confluenceActivity: [
+      { type: "edit", description: "Updated Deployment Checklist", timeAgo: "2 hours ago" },
+      { type: "comment", description: "Commented on Data Schema Design", timeAgo: "Yesterday" },
+    ],
+    effortDistribution: { feature: 65, bugFix: 20, codeReview: 15 },
+    performanceTrajectory: "exceptional",
+  },
+  "dev-2": {
+    developer: developers[1],
+    lookbackDays: 30,
+    velocity: 118,
+    velocityChange: -3,
+    mergeRatio: 88,
+    workloadHealth: 6.8,
+    ticketVelocity: 8,
+    docAuthorityLevel: 3,
+    commitsYTD: 1842,
+    commitHistory: generateCommitHistory(),
+    pullRequests: [
+      {
+        id: "pr-4",
+        title: "feat: add rate limiting to payment API",
+        repo: "platform/api-core",
+        number: 201,
+        status: "open",
+        reviewCount: 1,
+        timeAgo: "3h ago",
+        isActive: true,
+      },
+      {
+        id: "pr-5",
+        title: "fix: db connection pool exhaustion",
+        repo: "platform/db-service",
+        number: 188,
+        status: "merged",
+        timeAgo: "1d ago",
+      },
+    ],
+    jiraTickets: [],
+    sprint: {
+      name: "Platform Q1",
+      currentDay: 11,
+      totalDays: 14,
+      status: "at_risk",
+      cycleTime: 5.1,
+      throughput: 14,
+      overdueCount: 2,
+      issues: [
+        {
+          id: "i-4",
+          key: "PLT-244",
+          title: "Migrate legacy event bus to Kafka",
+          status: "in_progress",
+          points: 13,
+          priority: "high",
+        },
+        {
+          id: "i-5",
+          key: "PLT-251",
+          title: "Add OpenTelemetry tracing",
+          status: "todo",
+          points: 8,
+          priority: "medium",
+        },
+      ],
+    },
+    confluenceDocs: [
+      { title: "Platform Runbook 2025", reads: 720, edits: 28 },
+      { title: "Kafka Migration Design Doc", reads: 430, edits: 7 },
+    ],
+    confluenceActivity: [
+      { type: "edit", description: "Updated Platform Runbook", timeAgo: "1 day ago" },
+    ],
+    effortDistribution: { feature: 50, bugFix: 35, codeReview: 15 },
+    performanceTrajectory: "on_track",
+  },
+  "dev-3": {
+    developer: developers[2],
+    lookbackDays: 30,
+    velocity: 131,
+    velocityChange: 8,
+    mergeRatio: 91,
+    workloadHealth: 7.4,
+    ticketVelocity: 10,
+    docAuthorityLevel: 2,
+    commitsYTD: 2103,
+    commitHistory: generateCommitHistory(),
+    pullRequests: [
+      {
+        id: "pr-6",
+        title: "feat: checkout v2 redesign",
+        repo: "commerce/storefront",
+        number: 567,
+        status: "open",
+        reviewCount: 2,
+        timeAgo: "Active now",
+        isActive: true,
+      },
+    ],
+    jiraTickets: [],
+    sprint: {
+      name: "Commerce Sprint 22",
+      currentDay: 5,
+      totalDays: 14,
+      status: "on_track",
+      cycleTime: 3.9,
+      throughput: 21,
+      overdueCount: 0,
+      issues: [
+        {
+          id: "i-6",
+          key: "COM-891",
+          title: "Implement A/B testing framework",
+          status: "in_progress",
+          points: 8,
+          priority: "high",
+        },
+        {
+          id: "i-7",
+          key: "COM-895",
+          title: "Refactor cart state management",
+          status: "todo",
+          points: 5,
+          priority: "medium",
+        },
+      ],
+    },
+    confluenceDocs: [
+      { title: "Commerce Frontend Architecture", reads: 560, edits: 19 },
+    ],
+    confluenceActivity: [
+      { type: "comment", description: "Commented on Checkout Flow Design", timeAgo: "3 hours ago" },
+    ],
+    effortDistribution: { feature: 72, bugFix: 18, codeReview: 10 },
+    performanceTrajectory: "strong",
+  },
+  "dev-4": {
+    developer: developers[3],
+    lookbackDays: 30,
+    velocity: 98,
+    velocityChange: 5,
+    mergeRatio: 96,
+    workloadHealth: 9.1,
+    ticketVelocity: 15,
+    docAuthorityLevel: 5,
+    commitsYTD: 1540,
+    commitHistory: generateCommitHistory(),
+    pullRequests: [
+      {
+        id: "pr-7",
+        title: "feat: zero-downtime deployment pipeline",
+        repo: "infra/deploy",
+        number: 88,
+        status: "merged",
+        timeAgo: "4h ago",
+      },
+    ],
+    jiraTickets: [],
+    sprint: {
+      name: "Infra Q1",
+      currentDay: 12,
+      totalDays: 14,
+      status: "on_track",
+      cycleTime: 6.2,
+      throughput: 10,
+      overdueCount: 0,
+      issues: [
+        {
+          id: "i-8",
+          key: "INFRA-102",
+          title: "Upgrade Kubernetes to 1.29",
+          status: "done",
+          points: 13,
+          priority: "critical",
+        },
+        {
+          id: "i-9",
+          key: "INFRA-108",
+          title: "Add GPU node pool for ML workloads",
+          status: "in_progress",
+          points: 8,
+          priority: "high",
+        },
+      ],
+    },
+    confluenceDocs: [
+      { title: "Infrastructure Runbook", reads: 2100, edits: 88 },
+      { title: "Kubernetes Upgrade Guide", reads: 1400, edits: 31 },
+      { title: "On-Call Escalation Policy", reads: 980, edits: 15 },
+    ],
+    confluenceActivity: [
+      { type: "edit", description: "Updated On-Call Escalation Policy", timeAgo: "5 hours ago" },
+      { type: "edit", description: "Updated Infrastructure Runbook", timeAgo: "2 days ago" },
+    ],
+    effortDistribution: { feature: 40, bugFix: 10, codeReview: 50 },
+    performanceTrajectory: "exceptional",
+  },
+};
+
+

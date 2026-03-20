@@ -1,0 +1,76 @@
+{
+  "name": "devdash",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/dist/main.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "electron:compile": "tsc --project electron/tsconfig.json",
+    "electron:dev": "cross-env NODE_ENV=development concurrently \"bun run dev\" \"wait-on http://localhost:3000 && bun run electron:compile && electron electron/dist/main.js\"",
+    "electron:build": "bun run build && bun run electron:compile && electron-builder",
+    "electron:start": "cross-env NODE_ENV=production bun run electron:compile && electron electron/dist/main.js"
+  },
+  "build": {
+    "appId": "com.devdash.app",
+    "productName": "DevDash",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      ".next/**/*",
+      "public/**/*",
+      "electron/dist/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "next.config.*"
+    ],
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
+    "next": "16.2.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.0",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "wait-on": "^9.0.4"
+  },
+  "ignoreScripts": [
+    "sharp",
+    "unrs-resolver"
+  ],
+  "trustedDependencies": [
+    "better-sqlite3",
+    "electron",
+    "electron-winstaller",
+    "sharp",
+    "unrs-resolver"
+  ]
+}

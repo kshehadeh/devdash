@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Electron build output
+electron/dist/
+dist-electron/
+
+# Environment
+.env*.local
+
+# Database
+devdash.db
+devdash.db-shm
+devdash.db-wal
+
+# Build info
+tsconfig.tsbuildinfo
+
+# Misc
+.DS_Store
+*.pem
