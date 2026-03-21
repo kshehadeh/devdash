@@ -13,7 +13,8 @@
     "electron:build": "bun run build && bun run electron:compile && electron-builder",
     "electron:build:publish": "bun run build && bun run electron:compile && electron-builder --publish always",
     "electron:start": "cross-env NODE_ENV=production bun run electron:compile && electron electron/dist/main.js",
-    "electron:rebuild": "electron-rebuild -f -w better-sqlite3"
+    "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
+    "version": "bash scripts/version.sh"
   },
   "build": {
     "appId": "com.devdash.app",
