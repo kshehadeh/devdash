@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as http from "http";
@@ -70,6 +70,21 @@ function createWindow() {
   });
 
   mainWindow.loadURL(NEXT_URL);
+
+  // Open all external links in the system default browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (!url.startsWith(NEXT_URL)) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith(NEXT_URL)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
 
   if (isDev) {
     mainWindow.webContents.openDevTools();

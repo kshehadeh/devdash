@@ -126,6 +126,8 @@ export async function fetchPullRequests(
   repos?: { org: string; name: string }[],
   days?: number,
 ): Promise<PullRequest[]> {
+  if (repos !== undefined && repos.length === 0) return [];
+
   const repoFilter = repos && repos.length > 0
     ? repos.map((r) => `repo:${r.org}/${r.name}`).join(" ")
     : "";
@@ -162,8 +164,10 @@ export async function fetchPullRequests(
         title: item.title,
         repo: repoPath,
         number: item.number,
+        url: item.html_url,
         status,
         reviewCount: item.review_comments || item.requested_reviewers?.length || 0,
+        updatedAt: item.updated_at,
         timeAgo: timeAgo(item.updated_at),
         isActive: status === "open",
       });
@@ -205,6 +209,7 @@ export async function fetchMergeRatio(
   repos?: { org: string; name: string }[],
   days = 30,
 ): Promise<number> {
+  if (repos !== undefined && repos.length === 0) return 0;
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - days);
   const since = sinceDate.toISOString().split("T")[0];
@@ -235,6 +240,7 @@ export async function fetchVelocity(
   repos?: { org: string; name: string }[],
   days = 28,
 ): Promise<{ velocity: number; velocityChange: number }> {
+  if (repos !== undefined && repos.length === 0) return { velocity: 0, velocityChange: 0 };
   const now = new Date();
   const periodStart = new Date(now);
   periodStart.setDate(periodStart.getDate() - days);

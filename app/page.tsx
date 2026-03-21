@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Github, Kanban, BookOpen, Rocket, Calendar, Ticket } from "lucide-react";
+import { Github, BookOpen, Rocket, Calendar, Ticket, RefreshCw } from "lucide-react";
 import { TopBar } from "./components/layout/TopBar";
 import { Card } from "./components/ui/Card";
 import { CardSkeleton } from "./components/ui/CardSkeleton";
 import { MetricsBar } from "./components/dashboard/MetricsBar";
 import { CommitHeatmap } from "./components/dashboard/CommitHeatmap";
 import { PullRequestList } from "./components/dashboard/PullRequestList";
-import { SprintTracker } from "./components/dashboard/SprintTracker";
 import { ConfluenceSection } from "./components/dashboard/ConfluenceSection";
 import { EffortDistribution } from "./components/dashboard/EffortDistribution";
 import { PerformanceProjection } from "./components/dashboard/PerformanceProjection";
@@ -18,7 +17,6 @@ import type {
   Developer,
   GithubStatsResponse,
   VelocityStatsResponse,
-  SprintStatsResponse,
   TicketsStatsResponse,
   ConfluenceStatsResponse,
 } from "../lib/types";
@@ -30,6 +28,16 @@ const LOOKBACK_OPTIONS = [
   { days: 60, label: "60 days" },
   { days: 90, label: "90 days" },
 ];
+
+function formatSyncTime(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 function computeTrajectory(
   velocity: VelocityStatsResponse | null,
@@ -43,9 +51,26 @@ function computeTrajectory(
 
 export default function DashboardPage() {
   const [developers, setDevelopers] = useState<Developer[]>([]);
-  const [selectedDevId, setSelectedDevId] = useState<string>("");
-  const [lookbackDays, setLookbackDays] = useState(30);
+  const [selectedDevId, setSelectedDevId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("devdash.selectedDevId") ?? "";
+  });
+  const [lookbackDays, setLookbackDays] = useState<number>(() => {
+    if (typeof window === "undefined") return 30;
+    const stored = localStorage.getItem("devdash.lookbackDays");
+    return stored ? parseInt(stored, 10) : 30;
+  });
   const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSyncedAt: string | null }>({ syncing: false, lastSyncedAt: null });
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("devdash.selectedDevId", selectedDevId);
+  }, [selectedDevId]);
+
+  useEffect(() => {
+    localStorage.setItem("devdash.lookbackDays", lookbackDays.toString());
+  }, [lookbackDays]);
 
   const fetchDevelopers = useCallback(async () => {
     try {
@@ -68,18 +93,50 @@ export default function DashboardPage() {
     fetchDevelopers();
   }, [fetchDevelopers]);
 
+  // Poll sync status every 30 seconds
+  useEffect(() => {
+    const fetchSyncStatus = async () => {
+      try {
+        const res = await fetch("/api/sync/status");
+        if (res.ok) {
+          const data = await res.json();
+          const devStatus = data.developers?.find((d: { id: string }) => d.id === selectedDevId);
+          setSyncStatus({
+            syncing: data.syncing,
+            lastSyncedAt: devStatus?.lastSyncedAt ?? null,
+          });
+        }
+      } catch { /* ignore */ }
+    };
+    fetchSyncStatus();
+    const id = setInterval(fetchSyncStatus, 30000);
+    return () => clearInterval(id);
+  }, [selectedDevId]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetch(`/api/sync/trigger${selectedDevId ? `?developerId=${selectedDevId}` : ""}`, { method: "POST" });
+      // Wait a moment for sync to start, then poll status
+      await new Promise((r) => setTimeout(r, 1000));
+      setSyncStatus((prev) => ({ ...prev, syncing: true }));
+    } catch (err) {
+      console.error("Failed to trigger sync:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [selectedDevId]);
+
   const baseUrl = selectedDevId ? `/api/developers/${selectedDevId}/stats` : null;
   const daysSuffix = `?days=${lookbackDays}`;
 
   const githubUrl = useMemo(() => baseUrl ? `${baseUrl}/github${daysSuffix}` : null, [baseUrl, daysSuffix]);
   const velocityUrl = useMemo(() => baseUrl ? `${baseUrl}/velocity${daysSuffix}` : null, [baseUrl, daysSuffix]);
-  const sprintUrl = useMemo(() => baseUrl ? `${baseUrl}/sprint${daysSuffix}` : null, [baseUrl, daysSuffix]);
   const ticketsUrl = useMemo(() => baseUrl ? `${baseUrl}/tickets${daysSuffix}` : null, [baseUrl, daysSuffix]);
   const confluenceUrl = useMemo(() => baseUrl ? `${baseUrl}/confluence${daysSuffix}` : null, [baseUrl, daysSuffix]);
 
   const github = useSectionFetch<GithubStatsResponse>(githubUrl);
   const velocity = useSectionFetch<VelocityStatsResponse>(velocityUrl);
-  const sprint = useSectionFetch<SprintStatsResponse>(sprintUrl);
   const tickets = useSectionFetch<TicketsStatsResponse>(ticketsUrl);
   const confluence = useSectionFetch<ConfluenceStatsResponse>(confluenceUrl);
 
@@ -130,7 +187,31 @@ export default function DashboardPage() {
                   Performance metrics across GitHub, Jira &amp; Confluence
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                {/* Sync status */}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-block w-1.5 h-1.5 rounded-full ${
+                      syncStatus.syncing ? "bg-amber-400 animate-pulse"
+                        : syncStatus.lastSyncedAt ? "bg-emerald-400"
+                        : "bg-[var(--outline)]"
+                    }`}
+                  />
+                  <span className="text-[10px] font-label text-[var(--on-surface-variant)]">
+                    {syncStatus.syncing ? "Syncing..." : syncStatus.lastSyncedAt ? `Synced ${formatSyncTime(syncStatus.lastSyncedAt)}` : "Not synced"}
+                  </span>
+                  <button
+                    onClick={handleRefresh}
+                    disabled={refreshing || syncStatus.syncing}
+                    className="p-1 rounded hover:bg-[var(--surface-container-high)] transition-colors disabled:opacity-40"
+                    title="Refresh data"
+                  >
+                    <RefreshCw size={12} className={`text-[var(--on-surface-variant)] ${refreshing || syncStatus.syncing ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+
+                <div className="w-px h-4 bg-[var(--outline-variant)]/30" />
+
                 <Calendar size={14} className="text-[var(--on-surface-variant)]" />
                 <div className="flex bg-[var(--surface-container)] rounded-md overflow-hidden">
                   {LOOKBACK_OPTIONS.map((opt) => (
@@ -193,26 +274,6 @@ export default function DashboardPage() {
                   </Card>
                 ) : null}
 
-                {/* Sprint Tracker */}
-                {sprint.loading ? (
-                  <CardSkeleton lines={6} />
-                ) : sprint.data ? (
-                  <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Kanban size={16} className="text-[var(--primary)]" />
-                        <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          Active Sprint: {sprint.data.sprint.name}
-                        </h3>
-                      </div>
-                      <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                        Current
-                      </span>
-                    </div>
-                    <SprintTracker sprint={sprint.data.sprint} />
-                  </Card>
-                ) : null}
-
                 {/* Open Tickets */}
                 {tickets.loading ? (
                   <CardSkeleton lines={5} />
@@ -222,7 +283,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2">
                         <Ticket size={16} className="text-[var(--primary)]" />
                         <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          My Open Tickets
+                          {(developers.find((d) => d.id === selectedDevId)?.name.split(" ")[0] ?? "Open")} Tickets
                         </h3>
                         {tickets.data.jiraTickets.length > 0 && (
                           <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">

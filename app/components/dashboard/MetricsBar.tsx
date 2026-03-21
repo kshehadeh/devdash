@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp, GitMerge, Activity, Ticket, BookOpen, type LucideIcon } from "lucide-react";
+import { TrendingUp, GitMerge, Activity, Ticket, BookOpen, Info, type LucideIcon } from "lucide-react";
 import { MetricSkeleton } from "../ui/CardSkeleton";
 import type { VelocityStatsResponse, TicketsStatsResponse, ConfluenceStatsResponse } from "../../../lib/types";
 
@@ -21,29 +21,41 @@ interface MetricDef {
   sub: string;
   subColor: string;
   period?: string;
+  description?: string;
 }
 
-function MetricCard({ icon: Icon, label, value, sub, subColor, period }: MetricDef) {
+function MetricCard({ icon: Icon, label, value, sub, subColor, period, description }: MetricDef) {
   return (
-    <div className="bg-[var(--surface-container)] rounded-md p-4 flex gap-3 items-start">
+    <div className="bg-[var(--surface-container)] rounded-md p-4 flex gap-3 items-start relative">
       <div className="w-8 h-8 rounded-md bg-[var(--surface-container-highest)] flex items-center justify-center shrink-0">
         <Icon size={16} className="text-[var(--primary)]" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+        <div className="flex items-center mb-1 min-w-0 overflow-hidden">
+          <span className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider truncate">
             {label}
           </span>
-          {period && (
-            <span className="text-[9px] font-label text-[var(--on-surface-variant)]/60 uppercase tracking-wider">
-              {period}
-            </span>
-          )}
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-bold text-[var(--on-surface)] leading-none">{value}</span>
           <span className={`text-xs font-label font-semibold ${subColor}`}>{sub}</span>
         </div>
+      </div>
+      <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        {period && (
+          <span className="text-[9px] font-label text-[var(--on-surface-variant)]/60 uppercase tracking-wider whitespace-nowrap">
+            {period}
+          </span>
+        )}
+        {description && (
+          <div className="relative group">
+            <Info size={11} className="text-[var(--on-surface-variant)]/50 hover:text-[var(--on-surface-variant)] cursor-default transition-colors" />
+            <div className="absolute bottom-full right-0 mb-2 w-52 p-2 rounded-md bg-[var(--surface-container-highest)] border border-[var(--outline-variant)]/30 shadow-lg text-[10px] text-[var(--on-surface-variant)] leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+              {description}
+              <div className="absolute top-full right-2 border-4 border-transparent border-t-[var(--surface-container-highest)]" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -76,6 +88,7 @@ export function MetricsBar({
             sub={velocity.velocityChange >= 0 ? `↑ ${velocity.velocityChange}%` : `↓ ${Math.abs(velocity.velocityChange)}%`}
             subColor={velocity.velocityChange >= 0 ? "text-emerald-400" : "text-[var(--error)]"}
             period={periodLabel}
+            description="Number of pull requests merged in the selected period. The percentage shows change vs. the prior period of equal length."
           />
           <MetricCard
             icon={GitMerge}
@@ -84,6 +97,7 @@ export function MetricsBar({
             sub={velocity.mergeRatio >= 90 ? "OPTIMAL" : velocity.mergeRatio >= 70 ? "GOOD" : velocity.mergeRatio >= 50 ? "FAIR" : "LOW"}
             subColor={velocity.mergeRatio >= 90 ? "text-emerald-400" : velocity.mergeRatio >= 70 ? "text-[var(--primary)]" : "text-[var(--error)]"}
             period={periodLabel}
+            description="Percentage of opened pull requests that were successfully merged. A higher ratio indicates fewer abandoned or rejected PRs."
           />
         </>
       )}
@@ -101,6 +115,7 @@ export function MetricsBar({
             value={`${tickets.workloadHealth}/10`}
             sub={tickets.workloadHealth >= 8 ? "HEALTHY" : tickets.workloadHealth >= 5 ? "MODERATE" : tickets.workloadHealth > 0 ? "OVERLOADED" : "NO DATA"}
             subColor={tickets.workloadHealth >= 8 ? "text-emerald-400" : tickets.workloadHealth >= 5 ? "text-amber-400" : tickets.workloadHealth > 0 ? "text-[var(--error)]" : "text-[var(--on-surface-variant)]"}
+            description="A score from 1–10 reflecting ticket load balance. It factors in the number of open tickets, blockers, and how evenly work is distributed. Lower scores indicate overload."
           />
           <MetricCard
             icon={Ticket}
@@ -109,6 +124,7 @@ export function MetricsBar({
             sub="completed"
             subColor={tickets.ticketVelocity >= 10 ? "text-emerald-400" : tickets.ticketVelocity >= 5 ? "text-[var(--primary)]" : "text-[var(--on-surface-variant)]"}
             period={periodLabel}
+            description="Total number of tickets moved to a completed or done state within the selected period."
           />
         </>
       )}
@@ -122,6 +138,7 @@ export function MetricsBar({
           value={`Lvl ${confluence.docAuthorityLevel}`}
           sub={confluence.docAuthorityLevel >= 4 ? "EXPERT" : confluence.docAuthorityLevel >= 2 ? "ACTIVE" : "CONTRIBUTOR"}
           subColor={confluence.docAuthorityLevel >= 4 ? "text-emerald-400" : "text-[var(--primary)]"}
+          description="Measures documentation contribution level based on pages created, updated, and commented on in Confluence. Level 1 = Contributor, Level 3 = Active, Level 5 = Expert."
         />
       )}
     </div>

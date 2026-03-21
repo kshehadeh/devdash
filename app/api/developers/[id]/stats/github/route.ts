@@ -5,6 +5,14 @@ import {
   fetchPullRequests,
   classifyEffortDistribution,
 } from "../../../../../../lib/services/github";
+import {
+  getCachedContributions,
+  getCachedCommitsYTD,
+  getCachedPullRequests,
+  hasFreshCache,
+  getSyncStatus,
+} from "../../../../../../lib/db/cache";
+import { syncDeveloper } from "../../../../../../lib/sync/engine";
 import type { GithubStatsResponse, CommitDay, PullRequest } from "../../../../../../lib/types";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -13,6 +21,34 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const days = parseLookbackDays(new URL(req.url).searchParams);
     const ctx = getStatsContext(id, days);
     if (!ctx) return NextResponse.json({ error: "Developer not found" }, { status: 404 });
+
+    const contribCached = hasFreshCache(id, "github_contributions");
+    const prCached = hasFreshCache(id, "github_pull_requests");
+
+    // Serve from cache if available
+    if (contribCached && prCached) {
+      const commitHistory = getCachedContributions(id) ?? [];
+      const commitsYTD = getCachedCommitsYTD(id);
+      const pullRequests = getCachedPullRequests(id, days);
+      const effortDistribution = classifyEffortDistribution(pullRequests);
+
+      const contribSync = getSyncStatus(id, "github_contributions");
+      const prSync = getSyncStatus(id, "github_pull_requests");
+
+      const response: GithubStatsResponse & { _syncedAt?: string } = {
+        commitHistory,
+        commitsYTD,
+        pullRequests,
+        effortDistribution,
+        _syncedAt: contribSync?.lastSyncedAt ?? prSync?.lastSyncedAt,
+      };
+      return NextResponse.json(response);
+    }
+
+    // No cache — live fetch, trigger background sync for next time
+    if (!contribCached || !prCached) {
+      syncDeveloper(id).catch((err) => console.error("[GitHub route] Background sync error:", err));
+    }
 
     let commitHistory: CommitDay[] = [];
     let commitsYTD = 0;

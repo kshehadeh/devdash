@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { getStatsContext, parseLookbackDays } from "../../../../../../lib/api/stats-context";
 import { fetchConfluenceDocs, fetchConfluenceActivity } from "../../../../../../lib/services/atlassian";
+import {
+  getCachedConfluencePages,
+  getCachedConfluenceActivity,
+  hasFreshCache,
+  getSyncStatus,
+} from "../../../../../../lib/db/cache";
+import { syncDeveloper } from "../../../../../../lib/sync/engine";
 import type { ConfluenceStatsResponse, ConfluenceDoc, ConfluenceActivity } from "../../../../../../lib/types";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -9,6 +16,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const days = parseLookbackDays(new URL(req.url).searchParams);
     const ctx = getStatsContext(id, days);
     if (!ctx) return NextResponse.json({ error: "Developer not found" }, { status: 404 });
+
+    // Serve from cache if available
+    if (hasFreshCache(id, "confluence_pages")) {
+      const confluenceDocs = getCachedConfluencePages(id) ?? [];
+      const confluenceActivity = getCachedConfluenceActivity(id) ?? [];
+      const docAuthorityLevel = Math.min(5, Math.max(1, confluenceDocs.length));
+      const sync = getSyncStatus(id, "confluence_pages");
+
+      const response: ConfluenceStatsResponse & { _syncedAt?: string } = {
+        confluenceDocs, confluenceActivity, docAuthorityLevel,
+        _syncedAt: sync?.lastSyncedAt,
+      };
+      return NextResponse.json(response);
+    }
+
+    // No cache — live fetch, trigger sync
+    syncDeveloper(id).catch((err) => console.error("[Confluence route] Background sync error:", err));
 
     let confluenceDocs: ConfluenceDoc[] = [];
     let confluenceActivity: ConfluenceActivity[] = [];

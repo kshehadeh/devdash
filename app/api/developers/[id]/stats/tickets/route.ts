@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getStatsContext, parseLookbackDays } from "../../../../../../lib/api/stats-context";
 import { fetchJiraTickets, fetchCompletedTicketCount } from "../../../../../../lib/services/atlassian";
+import { hasFreshCache, getCachedCompletedTicketCount, getSyncStatus } from "../../../../../../lib/db/cache";
+import { syncDeveloper } from "../../../../../../lib/sync/engine";
 import type { TicketsStatsResponse, JiraTicket } from "../../../../../../lib/types";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,29 +12,45 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const ctx = getStatsContext(id, days);
     if (!ctx) return NextResponse.json({ error: "Developer not found" }, { status: 404 });
 
+    // Open tickets are ALWAYS fetched live (volatile)
     let jiraTickets: JiraTicket[] = [];
-    let ticketVelocity = 0;
 
     if (ctx.atConn?.connected && ctx.atConn.token && ctx.atConn.email && ctx.atConn.org && ctx.atEmail) {
-      const results = await Promise.allSettled([
-        fetchJiraTickets(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.projectFilter, days),
-        fetchCompletedTicketCount(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.projectFilter, days),
-      ]);
-
-      if (results[0].status === "fulfilled") {
-        jiraTickets = results[0].value;
-      } else {
-        console.error("Jira tickets error:", results[0].reason);
-      }
-
-      if (results[1].status === "fulfilled") {
-        ticketVelocity = results[1].value;
-      } else {
-        console.error("Completed ticket count error:", results[1].reason);
+      try {
+        jiraTickets = await fetchJiraTickets(
+          ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.projectFilter, days,
+        );
+      } catch (err) {
+        console.error("Jira tickets error:", err);
       }
     }
 
-    // Workload health: penalise high in-progress count relative to total open tickets
+    // Completed ticket count: try cache first, then live fallback
+    let ticketVelocity = 0;
+    let syncedAt: string | undefined;
+    let usedCache = false;
+
+    if (hasFreshCache(id, "jira_completed_tickets")) {
+      ticketVelocity = getCachedCompletedTicketCount(id, days);
+      syncedAt = getSyncStatus(id, "jira_completed_tickets")?.lastSyncedAt;
+      usedCache = ticketVelocity > 0; // Don't trust cache if it reports zero — verify with live
+    }
+
+    if (!usedCache && ctx.atConn?.connected && ctx.atConn.token && ctx.atConn.email && ctx.atConn.org && ctx.atEmail) {
+      try {
+        ticketVelocity = await fetchCompletedTicketCount(
+          ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.projectFilter, days,
+        );
+      } catch (err) {
+        console.error("Completed ticket count error:", err);
+      }
+      // Trigger sync if no cache existed
+      if (!hasFreshCache(id, "jira_completed_tickets")) {
+        syncDeveloper(id).catch((err) => console.error("[Tickets route] Background sync error:", err));
+      }
+    }
+
+    // Workload health from live open tickets
     const inProgressCount = jiraTickets.filter((t) => t.statusCategory === "in_progress").length;
     const todoCount = jiraTickets.filter((t) => t.statusCategory === "todo").length;
     const openCount = inProgressCount + todoCount;
@@ -43,7 +61,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       workloadHealth = Math.max(0, Math.round((10 - wipPenalty - volumePenalty) * 10) / 10);
     }
 
-    const response: TicketsStatsResponse = { jiraTickets, workloadHealth, ticketVelocity };
+    const response: TicketsStatsResponse & { _syncedAt?: string } = {
+      jiraTickets, workloadHealth, ticketVelocity, _syncedAt: syncedAt,
+    };
     return NextResponse.json(response);
   } catch (err) {
     console.error("GET /stats/tickets error:", err);

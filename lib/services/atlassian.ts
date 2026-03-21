@@ -203,6 +203,8 @@ export async function fetchJiraTickets(
   projectKeys?: string[],
   days = 30,
 ): Promise<JiraTicket[]> {
+  if (projectKeys !== undefined && projectKeys.length === 0) return [];
+
   const baseUrl = `https://${site}.atlassian.net`;
   const hdrs = headers(email, token);
 
@@ -278,6 +280,8 @@ export async function fetchCompletedTicketCount(
   projectKeys?: string[],
   days = 30,
 ): Promise<number> {
+  if (projectKeys !== undefined && projectKeys.length === 0) return 0;
+
   const baseUrl = `https://${site}.atlassian.net`;
 
   const accountId = await resolveAccountId(site, email, token, atlassianEmail);
@@ -309,6 +313,10 @@ export async function fetchCompletedTicketCount(
 
   const data = await res.json();
   console.log("[CompletedTickets] response keys:", Object.keys(data), "total:", data.total, "issues length:", data.issues?.length);
+  // Log first 200 chars of response if no issues found for debugging
+  if (!data.issues && !data.total) {
+    console.log("[CompletedTickets] unexpected response:", JSON.stringify(data).slice(0, 300));
+  }
   // New /search/jql endpoint may not return `total` — count from issues array
   if (typeof data.total === "number") return data.total;
   return data.issues?.length ?? 0;
@@ -392,6 +400,8 @@ export async function fetchConfluenceDocs(
   atlassianEmail: string,
   spaceKeys?: string[],
 ): Promise<ConfluenceDoc[]> {
+  if (spaceKeys !== undefined && spaceKeys.length === 0) return [];
+
   const baseUrl = `https://${site}.atlassian.net/wiki`;
   const hdrs = headers(email, token);
 
@@ -449,6 +459,8 @@ export async function fetchConfluenceActivity(
   atlassianEmail: string,
   spaceKeys?: string[],
 ): Promise<ConfluenceActivity[]> {
+  if (spaceKeys !== undefined && spaceKeys.length === 0) return [];
+
   const baseUrl = `https://${site}.atlassian.net/wiki`;
 
   // Resolve account ID — Confluence CQL requires accountId, not email

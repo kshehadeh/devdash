@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings, Database, Terminal } from "lucide-react";
+import { LayoutDashboard, Settings } from "lucide-react";
 import { clsx } from "clsx";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/settings/connections", icon: Terminal, label: "Connections" },
-  { href: "/settings/sources", icon: Database, label: "Data Sources" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -26,7 +24,7 @@ export function Sidebar() {
       <nav className="flex flex-col gap-1 flex-1 w-full px-2">
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+            href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
               key={href}

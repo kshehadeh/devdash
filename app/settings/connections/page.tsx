@@ -112,18 +112,11 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-center px-6 h-14 bg-[var(--surface-container-low)] shrink-0">
-        <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
-          Connected Systems
-        </h1>
-      </header>
-
-      <main className="flex-1 overflow-y-auto p-6 bg-[var(--surface)]">
-        {loading ? (
-          <div className="text-sm text-[var(--on-surface-variant)]">Loading...</div>
-        ) : (
-          <div className="max-w-2xl flex flex-col gap-5">
+    <div className="p-6">
+      {loading ? (
+        <div className="text-sm text-[var(--on-surface-variant)]">Loading...</div>
+      ) : (
+        <div className="max-w-2xl flex flex-col gap-5">
             {/* GitHub */}
             <Card>
               <div className="flex items-center justify-between mb-1">
@@ -313,9 +306,8 @@ export default function ConnectionsPage() {
                 )}
               </div>
             </Card>
-          </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }

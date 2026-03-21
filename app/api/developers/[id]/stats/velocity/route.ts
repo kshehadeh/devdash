@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { getStatsContext, parseLookbackDays } from "../../../../../../lib/api/stats-context";
 import { fetchMergeRatio, fetchVelocity } from "../../../../../../lib/services/github";
+import {
+  hasFreshCache,
+  computeCachedMergeRatio,
+  computeCachedVelocity,
+  getSyncStatus,
+} from "../../../../../../lib/db/cache";
+import { syncDeveloper } from "../../../../../../lib/sync/engine";
 import type { VelocityStatsResponse } from "../../../../../../lib/types";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -9,6 +16,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const days = parseLookbackDays(new URL(req.url).searchParams);
     const ctx = getStatsContext(id, days);
     if (!ctx) return NextResponse.json({ error: "Developer not found" }, { status: 404 });
+
+    // Velocity and merge ratio derive from cached PRs
+    if (hasFreshCache(id, "github_pull_requests")) {
+      const { velocity, velocityChange } = computeCachedVelocity(id, days);
+      const mergeRatio = computeCachedMergeRatio(id, days);
+      const sync = getSyncStatus(id, "github_pull_requests");
+
+      const response: VelocityStatsResponse & { _syncedAt?: string } = {
+        velocity, velocityChange, mergeRatio,
+        _syncedAt: sync?.lastSyncedAt,
+      };
+      return NextResponse.json(response);
+    }
+
+    // No cache — live fetch, trigger sync
+    syncDeveloper(id).catch((err) => console.error("[Velocity route] Background sync error:", err));
 
     let velocity = 0;
     let velocityChange = 0;

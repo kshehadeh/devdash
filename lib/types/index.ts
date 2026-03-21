@@ -13,8 +13,10 @@ export interface PullRequest {
   title: string;
   repo: string;
   number: number;
+  url: string;
   status: "merged" | "open" | "closed";
   reviewCount?: number;
+  updatedAt: string;
   timeAgo: string;
   isActive?: boolean;
 }

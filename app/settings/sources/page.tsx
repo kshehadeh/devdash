@@ -59,20 +59,13 @@ export default function SourcesPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-center px-6 h-14 bg-[var(--surface-container-low)] shrink-0">
-        <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
-          Data Sources
-        </h1>
-      </header>
-
-      <main className="flex-1 overflow-y-auto p-6 bg-[var(--surface)]">
-        {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 size={20} className="text-[var(--primary)] animate-spin" />
-          </div>
-        ) : (
-          <div className="max-w-2xl flex flex-col gap-5">
+    <div className="p-6">
+      {loading ? (
+        <div className="flex items-center justify-center h-32">
+          <Loader2 size={20} className="text-[var(--primary)] animate-spin" />
+        </div>
+      ) : (
+        <div className="max-w-2xl flex flex-col gap-5">
             {(Object.entries(grouped) as [DataSourceType, DataSource[]][]).map(([type, items]) => {
               const meta = TYPE_META[type];
               const Icon = meta.icon;
@@ -115,9 +108,8 @@ export default function SourcesPage() {
                 </Card>
               );
             })}
-          </div>
-        )}
-      </main>
+        </div>
+      )}
 
       {formMode && (
         <SourceFormDialog

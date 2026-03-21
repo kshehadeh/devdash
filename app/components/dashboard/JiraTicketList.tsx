@@ -48,6 +48,7 @@ export function JiraTicketList({ tickets }: JiraTicketListProps) {
               <span className="text-[10px] font-label text-[var(--on-surface-variant)]/60">{ticket.type}</span>
             </div>
             <div className="text-sm text-[var(--on-surface)] truncate font-medium">{ticket.title}</div>
+            <div className="text-[10px] font-label text-[var(--on-surface-variant)]/70 truncate mt-0.5">{ticket.status}</div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {categoryBadge[ticket.statusCategory]}

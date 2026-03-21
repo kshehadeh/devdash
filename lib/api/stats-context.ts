@@ -10,10 +10,10 @@ export interface StatsContext {
   atConn: ConnectionRecord | null;
   ghUsername: string | undefined;
   atEmail: string | undefined;
-  repoFilter: { org: string; name: string }[] | undefined;
+  repoFilter: { org: string; name: string }[];
   boardFilter: { id: number; name: string }[] | undefined;
-  spaceFilter: string[] | undefined;
-  projectFilter: string[] | undefined;
+  spaceFilter: string[];
+  projectFilter: string[];
 }
 
 export function parseLookbackDays(searchParams: URLSearchParams): number {
@@ -48,9 +48,9 @@ export function getStatsContext(developerId: string, lookbackDays: number): Stat
     atConn,
     ghUsername: developer.githubUsername,
     atEmail: developer.atlassianEmail,
-    repoFilter: ghRepos.length > 0 ? ghRepos : undefined,
+    repoFilter: ghRepos,
     boardFilter: jiraBoards.length > 0 ? jiraBoards : undefined,
-    spaceFilter: confluenceSpaceKeys.length > 0 ? confluenceSpaceKeys : undefined,
-    projectFilter: jiraProjectKeys.length > 0 ? jiraProjectKeys : undefined,
+    spaceFilter: confluenceSpaceKeys,
+    projectFilter: jiraProjectKeys,
   };
 }

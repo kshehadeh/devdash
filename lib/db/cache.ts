@@ -1,0 +1,194 @@
+import { getDb } from "./index";
+import type { CommitDay, PullRequest, ConfluenceDoc } from "../types";
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks}w ago`;
+}
+
+// ---------- Sync Status ----------
+
+export interface SyncStatusEntry {
+  lastSyncedAt: string;
+  status: "ok" | "error" | "syncing";
+  errorMessage: string | null;
+}
+
+export function getSyncStatus(devId: string, dataType: string): SyncStatusEntry | null {
+  const db = getDb();
+  const row = db.prepare(
+    "SELECT last_synced_at, status, error_message FROM sync_log WHERE developer_id = ? AND data_type = ?",
+  ).get(devId, dataType) as { last_synced_at: string; status: string; error_message: string | null } | undefined;
+  if (!row) return null;
+  return { lastSyncedAt: row.last_synced_at, status: row.status as SyncStatusEntry["status"], errorMessage: row.error_message };
+}
+
+export function getAllSyncStatuses(devId: string): Record<string, SyncStatusEntry> {
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT data_type, last_synced_at, status, error_message FROM sync_log WHERE developer_id = ?",
+  ).all(devId) as { data_type: string; last_synced_at: string; status: string; error_message: string | null }[];
+
+  const result: Record<string, SyncStatusEntry> = {};
+  for (const row of rows) {
+    result[row.data_type] = {
+      lastSyncedAt: row.last_synced_at,
+      status: row.status as SyncStatusEntry["status"],
+      errorMessage: row.error_message,
+    };
+  }
+  return result;
+}
+
+export function hasFreshCache(devId: string, dataType: string): boolean {
+  const status = getSyncStatus(devId, dataType);
+  return status !== null && status.status === "ok";
+}
+
+// ---------- Contributions ----------
+
+export function getCachedContributions(devId: string): CommitDay[] | null {
+  if (!hasFreshCache(devId, "github_contributions")) return null;
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT date, count FROM cached_contributions WHERE developer_id = ? ORDER BY date ASC",
+  ).all(devId) as { date: string; count: number }[];
+  return rows;
+}
+
+export function getCachedCommitsYTD(devId: string): number {
+  const db = getDb();
+  const yearStart = new Date().getFullYear() + "-01-01";
+  const row = db.prepare(
+    "SELECT COALESCE(SUM(count), 0) as total FROM cached_contributions WHERE developer_id = ? AND date >= ?",
+  ).get(devId, yearStart) as { total: number };
+  return row.total;
+}
+
+// ---------- Pull Requests ----------
+
+export function getCachedPullRequests(devId: string, days: number): PullRequest[] {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+
+  const rows = db.prepare(`
+    SELECT pr_number, repo, title, status, review_count, created_at, updated_at
+    FROM cached_pull_requests
+    WHERE developer_id = ? AND created_at >= ?
+    ORDER BY updated_at DESC
+    LIMIT 15
+  `).all(devId, sinceStr) as {
+    pr_number: number; repo: string; title: string; status: string;
+    review_count: number; created_at: string; updated_at: string;
+  }[];
+
+  return rows.map((row) => ({
+    id: `pr-${row.pr_number}`,
+    title: row.title,
+    repo: row.repo,
+    number: row.pr_number,
+    url: `https://github.com/${row.repo}/pull/${row.pr_number}`,
+    status: row.status as PullRequest["status"],
+    reviewCount: row.review_count,
+    updatedAt: row.updated_at,
+    timeAgo: timeAgo(row.updated_at),
+    isActive: row.status === "open",
+  }));
+}
+
+export function computeCachedMergeRatio(devId: string, days: number): number {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+
+  const total = db.prepare(
+    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ?",
+  ).get(devId, sinceStr) as { c: number };
+
+  if (total.c === 0) return 100;
+
+  const merged = db.prepare(
+    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND status = 'merged'",
+  ).get(devId, sinceStr) as { c: number };
+
+  return Math.round((merged.c / total.c) * 100);
+}
+
+export function computeCachedVelocity(devId: string, days: number): { velocity: number; velocityChange: number } {
+  const db = getDb();
+  const now = new Date();
+  const periodStart = new Date(now);
+  periodStart.setDate(periodStart.getDate() - days);
+  const prevPeriodStart = new Date(now);
+  prevPeriodStart.setDate(prevPeriodStart.getDate() - days * 2);
+
+  const recent = db.prepare(
+    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND created_at < ?",
+  ).get(devId, periodStart.toISOString(), now.toISOString()) as { c: number };
+
+  const prev = db.prepare(
+    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND created_at < ?",
+  ).get(devId, prevPeriodStart.toISOString(), periodStart.toISOString()) as { c: number };
+
+  const velocity = recent.c;
+  const velocityChange = prev.c > 0
+    ? Math.round(((recent.c - prev.c) / prev.c) * 100)
+    : 0;
+
+  return { velocity, velocityChange };
+}
+
+// ---------- Completed Tickets ----------
+
+export function getCachedCompletedTicketCount(devId: string, days: number): number {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+
+  const row = db.prepare(
+    "SELECT COUNT(*) as c FROM cached_completed_tickets WHERE developer_id = ? AND resolved_at >= ?",
+  ).get(devId, sinceStr) as { c: number };
+
+  return row.c;
+}
+
+// ---------- Confluence ----------
+
+export function getCachedConfluencePages(devId: string): ConfluenceDoc[] | null {
+  if (!hasFreshCache(devId, "confluence_pages")) return null;
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT title, view_count, version_count FROM cached_confluence_pages WHERE developer_id = ? ORDER BY last_modified DESC LIMIT 10",
+  ).all(devId) as { title: string; view_count: number; version_count: number }[];
+
+  return rows.map((row) => ({
+    title: row.title,
+    reads: row.view_count,
+    edits: row.version_count,
+  }));
+}
+
+export function getCachedConfluenceActivity(devId: string): { type: "edit"; description: string; timeAgo: string }[] | null {
+  if (!hasFreshCache(devId, "confluence_pages")) return null;
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT title, last_modified FROM cached_confluence_pages WHERE developer_id = ? ORDER BY last_modified DESC LIMIT 5",
+  ).all(devId) as { title: string; last_modified: string }[];
+
+  return rows.map((row) => ({
+    type: "edit" as const,
+    description: `Updated ${row.title}`,
+    timeAgo: timeAgo(row.last_modified),
+  }));
+}

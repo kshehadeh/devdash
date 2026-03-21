@@ -3,6 +3,7 @@ import path from "path";
 import { runMigrations } from "./schema";
 
 let _db: Database.Database | null = null;
+let _schedulerStarted = false;
 
 export function getDb(): Database.Database {
   if (_db) return _db;
@@ -16,6 +17,17 @@ export function getDb(): Database.Database {
   _db.pragma("foreign_keys = ON");
 
   runMigrations(_db);
+
+  // Lazy-start the sync scheduler on first DB access
+  if (!_schedulerStarted) {
+    _schedulerStarted = true;
+    // Dynamic import to avoid circular deps and keep startup fast
+    import("../sync/scheduler").then(({ startSyncScheduler }) => {
+      startSyncScheduler();
+    }).catch((err) => {
+      console.error("[DB] Failed to start sync scheduler:", err);
+    });
+  }
 
   return _db;
 }
