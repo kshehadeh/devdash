@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 declare global {
   interface Window {
@@ -24,16 +24,19 @@ export function useIpc<T>(
   args?: unknown[],
 ): IpcState<T> {
   const [state, setState] = useState<IpcState<T>>({ data: null, loading: true, error: null });
-  const argsRef = useRef(args);
-  argsRef.current = args;
+
+  // Serialize args to detect changes
+  const argsKey = JSON.stringify(args ?? []);
 
   const refresh = useCallback(() => {
     if (!channel) return;
     setState((prev) => ({ ...prev, loading: true, error: null }));
-    invoke<T>(channel, ...(argsRef.current ?? []))
+    const parsed = JSON.parse(argsKey) as unknown[];
+    invoke<T>(channel, ...parsed)
       .then((data) => setState({ data, loading: false, error: null }))
       .catch((err) => setState({ data: null, loading: false, error: err?.message ?? "IPC call failed" }));
-  }, [channel]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel, argsKey]);
 
   useEffect(() => {
     if (!channel) {

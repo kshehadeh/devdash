@@ -6,8 +6,18 @@ import { registerAllHandlers } from "./ipc/index";
 
 const isDev = process.env.NODE_ENV === "development";
 
-// Set DB path before anything else
-process.env.DEVDASH_DB_PATH = path.join(app.getPath("userData"), "devdash.db");
+// Must be called before app.whenReady() — registers the custom scheme as privileged
+// so it can load ES modules, use fetch, etc.
+if (!isDev) {
+  protocol.registerSchemesAsPrivileged([
+    { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  ]);
+}
+
+// Set DB path — in dev use project root, in production use userData
+process.env.DEVDASH_DB_PATH = isDev
+  ? path.join(process.cwd(), "devdash.db")
+  : path.join(app.getPath("userData"), "devdash.db");
 
 // Ensure DB schema is initialized (getDb runs migrations on first call)
 import("./db/index").then(({ getDb }) => getDb());
@@ -20,7 +30,7 @@ function setupProtocol() {
     let filePath = url.pathname;
     if (filePath === "/" || filePath === "") filePath = "/index.html";
 
-    const distDir = path.join(__dirname, "..", "dist");
+    const distDir = path.join(__dirname, "..", "..", "dist");
     const fullPath = path.join(distDir, filePath);
 
     // SPA fallback: if file doesn't exist, serve index.html

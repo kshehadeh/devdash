@@ -118,10 +118,10 @@ export default function DashboardPage() {
     }
   }, [selectedDevId]);
 
-  const github = useIpc<GithubStatsResponse>(selectedDevId ? "stats:github" : null, [selectedDevId, lookbackDays]);
-  const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [selectedDevId, lookbackDays]);
-  const tickets = useIpc<TicketsStatsResponse>(selectedDevId ? "stats:tickets" : null, [selectedDevId, lookbackDays]);
-  const confluence = useIpc<ConfluenceStatsResponse>(selectedDevId ? "stats:confluence" : null, [selectedDevId, lookbackDays]);
+  const github = useIpc<GithubStatsResponse>(selectedDevId ? "stats:github" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const tickets = useIpc<TicketsStatsResponse>(selectedDevId ? "stats:tickets" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const confluence = useIpc<ConfluenceStatsResponse>(selectedDevId ? "stats:confluence" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
 
   const trajectory = computeTrajectory(velocity.data);
 
