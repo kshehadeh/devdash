@@ -11,6 +11,7 @@
     "electron:compile": "tsc --project electron/tsconfig.json",
     "electron:dev": "cross-env NODE_ENV=development concurrently \"bun run dev\" \"wait-on http://localhost:3000 && bun run electron:compile && electron electron/dist/main.js\"",
     "electron:build": "bun run build && bun run electron:compile && electron-builder",
+    "electron:build:local": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false bun run build && bun run electron:compile && electron-builder --config.mac.notarize=false",
     "electron:build:publish": "bun run build && bun run electron:compile && electron-builder --publish always",
     "electron:start": "cross-env NODE_ENV=production bun run electron:compile && electron electron/dist/main.js",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
@@ -40,6 +41,7 @@
       }
     ],
     "asarUnpack": [
+      ".next/standalone/**",
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/bindings/**"
     ],

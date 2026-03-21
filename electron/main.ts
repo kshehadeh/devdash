@@ -60,9 +60,12 @@ function startNextServer(): Promise<void> {
   }
 
   return new Promise((resolve, reject) => {
-    // In production the app ships the Next.js standalone server.
-    // The standalone output lives at .next/standalone/server.js relative to app root.
-    const appRoot = path.join(__dirname, "..");
+    // In production the standalone server is in asarUnpack, so it lives in
+    // app.asar.unpacked/ on the real filesystem (not inside the asar archive).
+    const appPath = app.getAppPath(); // .../Resources/app.asar (or app/ in dev)
+    const appRoot = app.isPackaged
+      ? appPath.replace("app.asar", "app.asar.unpacked")
+      : path.join(__dirname, "..");
     const serverScript = path.join(appRoot, ".next", "standalone", "server.js");
 
     nextProcess = spawn(process.execPath, [serverScript], {
