@@ -1,95 +1,35 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, shell, protocol, net } from "electron";
 import { autoUpdater } from "electron-updater";
-import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
-import * as http from "http";
-import * as net from "net";
+import * as fs from "fs";
+import { registerAllHandlers } from "./ipc/index";
 
 const isDev = process.env.NODE_ENV === "development";
 
-// Set DB path before anything else so Next.js picks it up
+// Set DB path before anything else
 process.env.DEVDASH_DB_PATH = path.join(app.getPath("userData"), "devdash.db");
 
+// Ensure DB schema is initialized (getDb runs migrations on first call)
+import("./db/index").then(({ getDb }) => getDb());
+
 let mainWindow: BrowserWindow | null = null;
-let nextProcess: ChildProcess | null = null;
-let nextPort = 3000;
 
-function findFreePort(start: number): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on("error", () => {
-      // Port in use — try next
-      findFreePort(start + 1).then(resolve).catch(reject);
-    });
-    server.listen(start, "127.0.0.1", () => {
-      server.close(() => resolve(start));
-    });
+function setupProtocol() {
+  protocol.handle("app", (req) => {
+    const url = new URL(req.url);
+    let filePath = url.pathname;
+    if (filePath === "/" || filePath === "") filePath = "/index.html";
+
+    const distDir = path.join(__dirname, "..", "dist");
+    const fullPath = path.join(distDir, filePath);
+
+    // SPA fallback: if file doesn't exist, serve index.html
+    const servePath = fs.existsSync(fullPath) ? fullPath : path.join(distDir, "index.html");
+    return net.fetch(`file://${servePath}`);
   });
 }
 
-function waitForServer(url: string, retries = 30, delay = 1000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const attempt = (remaining: number) => {
-      http
-        .get(url, (res) => {
-          if (res.statusCode && res.statusCode < 500) {
-            resolve();
-          } else {
-            retry(remaining);
-          }
-        })
-        .on("error", () => retry(remaining));
-    };
-    const retry = (remaining: number) => {
-      if (remaining <= 0) {
-        reject(new Error(`Server did not start at ${url}`));
-        return;
-      }
-      setTimeout(() => attempt(remaining - 1), delay);
-    };
-    attempt(retries);
-  });
-}
-
-function startNextServer(): Promise<void> {
-  const nextUrl = `http://localhost:${nextPort}`;
-
-  if (isDev) {
-    return waitForServer(nextUrl);
-  }
-
-  return new Promise((resolve, reject) => {
-    // In production the standalone server is in asarUnpack, so it lives in
-    // app.asar.unpacked/ on the real filesystem (not inside the asar archive).
-    const appPath = app.getAppPath(); // .../Resources/app.asar (or app/ in dev)
-    const appRoot = app.isPackaged
-      ? appPath.replace("app.asar", "app.asar.unpacked")
-      : path.join(__dirname, "..");
-    const serverScript = path.join(appRoot, ".next", "standalone", "server.js");
-
-    nextProcess = spawn(process.execPath, [serverScript], {
-      cwd: path.join(appRoot, ".next", "standalone"),
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
-        NODE_ENV: "production",
-        PORT: String(nextPort),
-        HOSTNAME: "127.0.0.1",
-        DEVDASH_DB_PATH: process.env.DEVDASH_DB_PATH,
-      },
-      stdio: "inherit",
-    });
-
-    nextProcess.on("error", reject);
-
-    waitForServer(nextUrl).then(resolve).catch(reject);
-  });
-}
-
-function createWindow(port: number) {
-  const nextUrl = `http://localhost:${port}`;
-
+function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -100,26 +40,27 @@ function createWindow(port: number) {
     },
   });
 
-  mainWindow.loadURL(nextUrl);
+  if (isDev) {
+    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadURL("app://./index.html");
+  }
 
-  // Open all external links in the system default browser
+  // Open external links in system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(nextUrl)) {
+    if (!url.startsWith("app://") && !url.startsWith("http://localhost")) {
       shell.openExternal(url);
     }
     return { action: "deny" };
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(nextUrl)) {
+    if (!url.startsWith("app://") && !url.startsWith("http://localhost")) {
       event.preventDefault();
       shell.openExternal(url);
     }
   });
-
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -128,41 +69,23 @@ function createWindow(port: number) {
 
 function setupAutoUpdater() {
   if (isDev) return;
-
   autoUpdater.checkForUpdatesAndNotify();
-
   autoUpdater.on("update-downloaded", () => {
     autoUpdater.quitAndInstall();
   });
 }
 
-app.whenReady().then(async () => {
-  try {
-    nextPort = await findFreePort(3000);
-    await startNextServer();
-    createWindow(nextPort);
-    setupAutoUpdater();
-  } catch (err) {
-    console.error("Failed to start Next.js server:", err);
-    app.quit();
-  }
+app.whenReady().then(() => {
+  if (!isDev) setupProtocol();
+  registerAllHandlers();
+  createWindow();
+  setupAutoUpdater();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(nextPort);
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
-
-app.on("before-quit", () => {
-  if (nextProcess) {
-    nextProcess.kill();
-    nextProcess = null;
-  }
+  if (process.platform !== "darwin") app.quit();
 });

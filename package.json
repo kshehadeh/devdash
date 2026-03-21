@@ -4,16 +4,13 @@
   "private": true,
   "main": "electron/dist/main.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && bun run electron:compile && electron electron/dist/main.js\"",
+    "build": "vite build",
     "lint": "eslint",
     "electron:compile": "tsc --project electron/tsconfig.json",
-    "electron:dev": "cross-env NODE_ENV=development concurrently \"bun run dev\" \"wait-on http://localhost:3000 && bun run electron:compile && electron electron/dist/main.js\"",
-    "electron:build": "bun run build && bash scripts/prepare-standalone.sh && bun run electron:compile && electron-builder",
-    "electron:build:local": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false bun run build && bash scripts/prepare-standalone.sh && bun run electron:compile && electron-builder --config.mac.notarize=false",
-    "electron:build:publish": "bun run build && bash scripts/prepare-standalone.sh && bun run electron:compile && electron-builder --publish always",
-    "electron:start": "cross-env NODE_ENV=production bun run electron:compile && electron electron/dist/main.js",
+    "electron:build": "bun run build && bun run electron:compile && electron-builder",
+    "electron:build:local": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false bun run build && bun run electron:compile && electron-builder --config.mac.notarize=false",
+    "electron:build:publish": "bun run build && bun run electron:compile && electron-builder --publish always",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "release": "bash scripts/version.sh"
   },
@@ -24,24 +21,17 @@
       "output": "dist-electron"
     },
     "files": [
-      ".next/standalone/**/*",
+      "dist/**/*",
       "electron/dist/**/*",
       "package.json"
     ],
     "asarUnpack": [
-      ".next/standalone/**",
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/bindings/**"
     ],
     "mac": {
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
+        { "target": "dmg", "arch": ["x64", "arm64"] }
       ],
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
@@ -63,9 +53,9 @@
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.3",
     "lucide-react": "^0.577.0",
-    "next": "16.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-router-dom": "^7.13.1",
     "recharts": "^3.8.0"
   },
   "devDependencies": {
@@ -75,14 +65,15 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^41.0.3",
     "electron-builder": "^26.8.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.0",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vite": "^8.0.1",
     "wait-on": "^9.0.4"
   },
   "ignoreScripts": [

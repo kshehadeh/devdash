@@ -1,6 +1,7 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
-// Expose safe APIs to the renderer process here
 contextBridge.exposeInMainWorld("electron", {
   platform: process.platform,
+  invoke: <T = unknown>(channel: string, ...args: unknown[]): Promise<T> =>
+    ipcRenderer.invoke(channel, ...args) as Promise<T>,
 });
