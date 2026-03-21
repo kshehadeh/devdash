@@ -72,6 +72,7 @@ function startNextServer(): Promise<void> {
       cwd: path.join(appRoot, ".next", "standalone"),
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
         NODE_ENV: "production",
         PORT: String(nextPort),
         HOSTNAME: "127.0.0.1",
