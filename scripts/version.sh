@@ -3,17 +3,32 @@ set -euo pipefail
 
 TYPE="${1:-}"
 if [[ "$TYPE" != "patch" && "$TYPE" != "minor" && "$TYPE" != "major" ]]; then
-  echo "Usage: bun run version <patch|minor|major>"
+  echo "Usage: bun run release <patch|minor|major>"
   exit 1
 fi
 
-# Bump version in package.json only (no git tag yet)
-npm version "$TYPE" --no-git-tag-version --no-commit-hooks > /dev/null
+# Parse current version
+CURRENT=$(node -p "require('./package.json').version")
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
 
-VERSION=$(node -p "require('./package.json').version")
+case "$TYPE" in
+  major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+  minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+  patch) PATCH=$((PATCH + 1)) ;;
+esac
+
+VERSION="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${VERSION}"
 
-git add package.json bun.lock
+# Write new version directly into package.json
+node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+pkg.version = '${VERSION}';
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+"
+
+git add package.json
 git commit -m "chore: bump version to ${TAG}"
 git tag "$TAG"
 git push origin main

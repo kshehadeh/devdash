@@ -1,6 +1,6 @@
 {
   "name": "devdash",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "main": "electron/dist/main.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "electron:build:publish": "bun run build && bun run electron:compile && electron-builder --publish always",
     "electron:start": "cross-env NODE_ENV=production bun run electron:compile && electron electron/dist/main.js",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
-    "version": "bash scripts/version.sh"
+    "release": "bash scripts/version.sh"
   },
   "build": {
     "appId": "com.devdash.app",
@@ -46,7 +46,13 @@
     "afterPack": "scripts/after-pack.js",
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
