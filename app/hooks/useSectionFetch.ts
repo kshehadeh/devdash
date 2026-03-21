@@ -13,15 +13,13 @@ export function useSectionFetch<T>(url: string | null): SectionState<T> {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!url) {
-      setState({ data: null, loading: false, error: null });
-      return;
-    }
+    if (!url) return;
 
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState((prev) => ({ ...prev, loading: true, error: null }));
 
     fetch(url, { signal: controller.signal })

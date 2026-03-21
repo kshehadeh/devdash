@@ -11,7 +11,9 @@
     "electron:compile": "tsc --project electron/tsconfig.json",
     "electron:dev": "cross-env NODE_ENV=development concurrently \"bun run dev\" \"wait-on http://localhost:3000 && bun run electron:compile && electron electron/dist/main.js\"",
     "electron:build": "bun run build && bun run electron:compile && electron-builder",
-    "electron:start": "cross-env NODE_ENV=production bun run electron:compile && electron electron/dist/main.js"
+    "electron:build:publish": "bun run build && bun run electron:compile && electron-builder --publish always",
+    "electron:start": "cross-env NODE_ENV=production bun run electron:compile && electron electron/dist/main.js",
+    "electron:rebuild": "electron-rebuild -f -w better-sqlite3"
   },
   "build": {
     "appId": "com.devdash.app",
@@ -20,27 +22,52 @@
       "output": "dist-electron"
     },
     "files": [
-      ".next/**/*",
+      ".next/standalone/**/*",
+      ".next/static/**/*",
       "public/**/*",
       "electron/dist/**/*",
-      "node_modules/**/*",
-      "package.json",
-      "next.config.*"
+      "package.json"
     ],
+    "extraResources": [
+      {
+        "from": ".next/static",
+        "to": ".next/static"
+      },
+      {
+        "from": "public",
+        "to": "public"
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/bindings/**"
+    ],
+    "afterPack": "scripts/after-pack.js",
     "mac": {
-      "target": "dmg"
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "${env.APPLE_TEAM_ID}"
+      }
     },
-    "win": {
-      "target": "nsis"
-    },
-    "linux": {
-      "target": "AppImage"
+    "publish": {
+      "provider": "github",
+      "owner": "kshehadeh",
+      "repo": "devdash"
     }
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
     "better-sqlite3": "^12.8.0",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^0.577.0",
     "next": "16.2.0",
     "react": "19.2.4",
@@ -48,6 +75,7 @@
     "recharts": "^3.8.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
