@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings } from "lucide-react";
+import { LayoutDashboard, Library, Settings } from "lucide-react";
 import { clsx } from "clsx";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/reference", icon: Library, label: "Reference" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 

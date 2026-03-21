@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (contribCached && prCached) {
       const commitHistory = getCachedContributions(id) ?? [];
       const commitsYTD = getCachedCommitsYTD(id);
-      const pullRequests = getCachedPullRequests(id, days);
+      const pullRequests = getCachedPullRequests(id, days, ctx.repoFilter);
       const effortDistribution = classifyEffortDistribution(pullRequests);
 
       const contribSync = getSyncStatus(id, "github_contributions");

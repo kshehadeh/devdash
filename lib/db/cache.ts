@@ -74,19 +74,36 @@ export function getCachedCommitsYTD(devId: string): number {
 
 // ---------- Pull Requests ----------
 
-export function getCachedPullRequests(devId: string, days: number): PullRequest[] {
+function repoClause(repos: { org: string; name: string }[] | undefined): { sql: string; values: string[] } {
+  if (!repos || repos.length === 0) return { sql: "", values: [] };
+  const values = repos.map((r) => `${r.org}/${r.name}`);
+  return { sql: ` AND repo IN (${values.map(() => "?").join(",")})`, values };
+}
+
+function projectClause(projectKeys: string[] | undefined): { sql: string; values: string[] } {
+  if (!projectKeys || projectKeys.length === 0) return { sql: "", values: [] };
+  return { sql: ` AND project_key IN (${projectKeys.map(() => "?").join(",")})`, values: projectKeys };
+}
+
+function spaceClause(spaceKeys: string[] | undefined): { sql: string; values: string[] } {
+  if (!spaceKeys || spaceKeys.length === 0) return { sql: "", values: [] };
+  return { sql: ` AND space_key IN (${spaceKeys.map(() => "?").join(",")})`, values: spaceKeys };
+}
+
+export function getCachedPullRequests(devId: string, days: number, repos?: { org: string; name: string }[]): PullRequest[] {
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
   const sinceStr = since.toISOString();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
 
   const rows = db.prepare(`
     SELECT pr_number, repo, title, status, review_count, created_at, updated_at
     FROM cached_pull_requests
-    WHERE developer_id = ? AND created_at >= ?
+    WHERE developer_id = ? AND created_at >= ?${repoSql}
     ORDER BY updated_at DESC
     LIMIT 15
-  `).all(devId, sinceStr) as {
+  `).all(devId, sinceStr, ...repoValues) as {
     pr_number: number; repo: string; title: string; status: string;
     review_count: number; created_at: string; updated_at: string;
   }[];
@@ -105,40 +122,42 @@ export function getCachedPullRequests(devId: string, days: number): PullRequest[
   }));
 }
 
-export function computeCachedMergeRatio(devId: string, days: number): number {
+export function computeCachedMergeRatio(devId: string, days: number, repos?: { org: string; name: string }[]): number {
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
   const sinceStr = since.toISOString();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
 
   const total = db.prepare(
-    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ?",
-  ).get(devId, sinceStr) as { c: number };
+    `SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ?${repoSql}`,
+  ).get(devId, sinceStr, ...repoValues) as { c: number };
 
   if (total.c === 0) return 100;
 
   const merged = db.prepare(
-    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND status = 'merged'",
-  ).get(devId, sinceStr) as { c: number };
+    `SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND status = 'merged'${repoSql}`,
+  ).get(devId, sinceStr, ...repoValues) as { c: number };
 
   return Math.round((merged.c / total.c) * 100);
 }
 
-export function computeCachedVelocity(devId: string, days: number): { velocity: number; velocityChange: number } {
+export function computeCachedVelocity(devId: string, days: number, repos?: { org: string; name: string }[]): { velocity: number; velocityChange: number } {
   const db = getDb();
   const now = new Date();
   const periodStart = new Date(now);
   periodStart.setDate(periodStart.getDate() - days);
   const prevPeriodStart = new Date(now);
   prevPeriodStart.setDate(prevPeriodStart.getDate() - days * 2);
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
 
   const recent = db.prepare(
-    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND created_at < ?",
-  ).get(devId, periodStart.toISOString(), now.toISOString()) as { c: number };
+    `SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND created_at < ?${repoSql}`,
+  ).get(devId, periodStart.toISOString(), now.toISOString(), ...repoValues) as { c: number };
 
   const prev = db.prepare(
-    "SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND created_at < ?",
-  ).get(devId, prevPeriodStart.toISOString(), periodStart.toISOString()) as { c: number };
+    `SELECT COUNT(*) as c FROM cached_pull_requests WHERE developer_id = ? AND created_at >= ? AND created_at < ?${repoSql}`,
+  ).get(devId, prevPeriodStart.toISOString(), periodStart.toISOString(), ...repoValues) as { c: number };
 
   const velocity = recent.c;
   const velocityChange = prev.c > 0
@@ -148,29 +167,69 @@ export function computeCachedVelocity(devId: string, days: number): { velocity: 
   return { velocity, velocityChange };
 }
 
-// ---------- Completed Tickets ----------
+// ---------- Jira Tickets ----------
 
-export function getCachedCompletedTicketCount(devId: string, days: number): number {
+export function getCachedJiraTickets(devId: string, site: string, days: number, projectKeys?: string[]): import("../types").JiraTicket[] {
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
   const sinceStr = since.toISOString();
+  const { sql: projSql, values: projValues } = projectClause(projectKeys);
+
+  const rows = db.prepare(`
+    SELECT issue_key, summary, status, status_category, priority, issue_type, project_key, updated_at
+    FROM cached_jira_tickets
+    WHERE developer_id = ? AND status_category != 'done' AND updated_at >= ?${projSql}
+    ORDER BY updated_at DESC
+    LIMIT 50
+  `).all(devId, sinceStr, ...projValues) as {
+    issue_key: string;
+    summary: string;
+    status: string;
+    status_category: string;
+    priority: string;
+    issue_type: string;
+    project_key: string | null;
+    updated_at: string;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.issue_key,
+    key: row.issue_key,
+    title: row.summary,
+    status: row.status,
+    statusCategory: row.status_category as "todo" | "in_progress" | "done",
+    priority: row.priority as import("../types").JiraTicket["priority"],
+    type: row.issue_type,
+    updatedAt: row.updated_at,
+    updatedAgo: timeAgo(row.updated_at),
+    url: `https://${site}.atlassian.net/browse/${row.issue_key}`,
+  }));
+}
+
+export function getCachedCompletedTicketCount(devId: string, days: number, projectKeys?: string[]): number {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: projSql, values: projValues } = projectClause(projectKeys);
 
   const row = db.prepare(
-    "SELECT COUNT(*) as c FROM cached_completed_tickets WHERE developer_id = ? AND resolved_at >= ?",
-  ).get(devId, sinceStr) as { c: number };
+    `SELECT COUNT(*) as c FROM cached_jira_tickets WHERE developer_id = ? AND status_category = 'done' AND updated_at >= ?${projSql}`,
+  ).get(devId, sinceStr, ...projValues) as { c: number };
 
   return row.c;
 }
 
 // ---------- Confluence ----------
 
-export function getCachedConfluencePages(devId: string): ConfluenceDoc[] | null {
+export function getCachedConfluencePages(devId: string, spaceKeys?: string[]): ConfluenceDoc[] | null {
   if (!hasFreshCache(devId, "confluence_pages")) return null;
   const db = getDb();
+  const { sql: spaceSql, values: spaceValues } = spaceClause(spaceKeys);
   const rows = db.prepare(
-    "SELECT title, view_count, version_count FROM cached_confluence_pages WHERE developer_id = ? ORDER BY last_modified DESC LIMIT 10",
-  ).all(devId) as { title: string; view_count: number; version_count: number }[];
+    `SELECT title, view_count, version_count FROM cached_confluence_pages WHERE developer_id = ?${spaceSql} ORDER BY last_modified DESC LIMIT 10`,
+  ).all(devId, ...spaceValues) as { title: string; view_count: number; version_count: number }[];
 
   return rows.map((row) => ({
     title: row.title,
@@ -179,12 +238,13 @@ export function getCachedConfluencePages(devId: string): ConfluenceDoc[] | null 
   }));
 }
 
-export function getCachedConfluenceActivity(devId: string): { type: "edit"; description: string; timeAgo: string }[] | null {
+export function getCachedConfluenceActivity(devId: string, spaceKeys?: string[]): { type: "edit"; description: string; timeAgo: string }[] | null {
   if (!hasFreshCache(devId, "confluence_pages")) return null;
   const db = getDb();
+  const { sql: spaceSql, values: spaceValues } = spaceClause(spaceKeys);
   const rows = db.prepare(
-    "SELECT title, last_modified FROM cached_confluence_pages WHERE developer_id = ? ORDER BY last_modified DESC LIMIT 5",
-  ).all(devId) as { title: string; last_modified: string }[];
+    `SELECT title, last_modified FROM cached_confluence_pages WHERE developer_id = ?${spaceSql} ORDER BY last_modified DESC LIMIT 5`,
+  ).all(devId, ...spaceValues) as { title: string; last_modified: string }[];
 
   return rows.map((row) => ({
     type: "edit" as const,

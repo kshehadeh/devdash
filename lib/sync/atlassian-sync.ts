@@ -67,26 +67,24 @@ function getAtlassianContext(developerId: string) {
   };
 }
 
-// ---------- Completed Tickets Sync ----------
+// ---------- Jira Tickets Sync (all statuses) ----------
 
-export async function syncCompletedTickets(developerId: string): Promise<void> {
+export async function syncJiraTickets(developerId: string): Promise<void> {
   const db = getDb();
   const ctx = getAtlassianContext(developerId);
   if (!ctx) return;
-  if (ctx.projectKeys.length === 0) return;
 
-  setSyncStatus(developerId, "jira_completed_tickets", "syncing");
+  setSyncStatus(developerId, "jira_tickets", "syncing");
 
   try {
     const baseUrl = `https://${ctx.site}.atlassian.net`;
     const hdrs = atlHeaders(ctx.email, ctx.token);
 
     const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
-    if (!accountId) { setSyncStatus(developerId, "jira_completed_tickets", "error", "Could not resolve account ID"); return; }
+    if (!accountId) { setSyncStatus(developerId, "jira_tickets", "error", "Could not resolve account ID"); return; }
 
-    // Determine start date
     const syncLog = db.prepare(
-      "SELECT last_cursor FROM sync_log WHERE developer_id = ? AND data_type = 'jira_completed_tickets'",
+      "SELECT last_cursor FROM sync_log WHERE developer_id = ? AND data_type = 'jira_tickets'",
     ).get(developerId) as { last_cursor: string | null } | undefined;
 
     let since: string;
@@ -98,46 +96,44 @@ export async function syncCompletedTickets(developerId: string): Promise<void> {
       since = d.toISOString().split("T")[0];
     }
 
-    const projectFilter = ` AND project IN (${ctx.projectKeys.join(",")})`;
+    const projectFilter = ctx.projectKeys.length > 0 ? ` AND project IN (${ctx.projectKeys.join(",")})` : "";
+    const jql = `assignee = "${accountId}" AND updated >= "${since}"${projectFilter} ORDER BY updated ASC`;
 
-    const jql = `assignee = "${accountId}" AND statusCategory = Done AND status changed AFTER "${since}"${projectFilter} ORDER BY updated ASC`;
-
-    let startAt = 0;
     const maxResults = 100;
-    let hasMore = true;
-    let latestResolved = since;
+    let nextPageToken: string | undefined;
+    let latestUpdated = since;
 
     const upsert = db.prepare(`
-      INSERT OR REPLACE INTO cached_completed_tickets
-        (developer_id, issue_key, summary, resolved_at, project_key)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO cached_jira_tickets
+        (developer_id, issue_key, summary, status, status_category, project_key, updated_at, priority, issue_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    while (hasMore) {
+    do {
+      const body: Record<string, unknown> = { jql, maxResults, fields: ["summary", "status", "priority", "issuetype", "project", "updated"] };
+      if (nextPageToken) body.nextPageToken = nextPageToken;
+
       const res = await fetch(`${baseUrl}/rest/api/3/search/jql`, {
         method: "POST",
         headers: hdrs,
-        body: JSON.stringify({
-          jql,
-          maxResults,
-          startAt,
-          fields: ["summary", "resolutiondate", "project", "updated"],
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.error("[SyncCompletedTickets] search failed:", res.status, body);
-        break;
+        const text = await res.text().catch(() => "");
+        console.error("[SyncJiraTickets] search failed:", res.status, text);
+        setSyncStatus(developerId, "jira_tickets", "error", `HTTP ${res.status}: ${text.slice(0, 200)}`);
+        return;
       }
 
       const data = await res.json();
-      console.log("[SyncCompletedTickets] response keys:", Object.keys(data), "issues:", data.issues?.length);
       const issues: {
         key: string;
         fields: {
           summary: string;
-          resolutiondate: string | null;
+          status: { name: string; statusCategory: { key: string } };
+          priority: { name: string } | null;
+          issuetype: { name: string } | null;
           project: { key: string };
           updated: string;
         };
@@ -145,25 +141,38 @@ export async function syncCompletedTickets(developerId: string): Promise<void> {
 
       db.transaction(() => {
         for (const issue of issues) {
-          const resolvedAt = issue.fields.resolutiondate ?? issue.fields.updated;
+          const categoryKey = issue.fields.status.statusCategory.key;
+          const statusCategory =
+            categoryKey === "done" ? "done" :
+            categoryKey === "indeterminate" ? "in_progress" : "todo";
+
+          const rawPriority = (issue.fields.priority?.name ?? "Medium").toLowerCase();
+          const priority =
+            rawPriority === "highest" || rawPriority === "critical" || rawPriority === "blocker" ? "critical" :
+            rawPriority === "high" ? "high" :
+            rawPriority === "low" || rawPriority === "lowest" ? "low" : "medium";
+
           upsert.run(
             developerId,
             issue.key,
             issue.fields.summary,
-            resolvedAt,
+            issue.fields.status.name,
+            statusCategory,
             issue.fields.project.key,
+            issue.fields.updated,
+            priority,
+            issue.fields.issuetype?.name ?? "Task",
           );
-          if (resolvedAt > latestResolved) latestResolved = resolvedAt;
+          if (issue.fields.updated > latestUpdated) latestUpdated = issue.fields.updated;
         }
       })();
 
-      hasMore = issues.length === maxResults;
-      startAt += maxResults;
-    }
+      nextPageToken = data.nextPageToken ?? undefined;
+    } while (nextPageToken);
 
-    setSyncStatus(developerId, "jira_completed_tickets", "ok", null, latestResolved.split("T")[0]);
+    setSyncStatus(developerId, "jira_tickets", "ok", null, latestUpdated.split("T")[0]);
   } catch (err) {
-    setSyncStatus(developerId, "jira_completed_tickets", "error", String(err));
+    setSyncStatus(developerId, "jira_tickets", "error", String(err));
     throw err;
   }
 }
@@ -174,7 +183,6 @@ export async function syncConfluencePages(developerId: string): Promise<void> {
   const db = getDb();
   const ctx = getAtlassianContext(developerId);
   if (!ctx) return;
-  if (ctx.spaceKeys.length === 0) return;
 
   setSyncStatus(developerId, "confluence_pages", "syncing");
 
@@ -185,12 +193,12 @@ export async function syncConfluencePages(developerId: string): Promise<void> {
     const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
     if (!accountId) { setSyncStatus(developerId, "confluence_pages", "error", "Could not resolve account ID"); return; }
 
-    const spaceFilter = ` AND space IN (${ctx.spaceKeys.map((k) => `"${k}"`).join(",")})`;
+    const spaceFilter = ctx.spaceKeys.length > 0 ? ` AND space IN (${ctx.spaceKeys.map((k) => `"${k}"`).join(",")})` : "";
 
     // For Confluence, always do a full fetch of recent pages (no reliable incremental cursor)
     const cql = `contributor = "${accountId}" AND type = page${spaceFilter} ORDER BY lastmodified DESC`;
     const res = await fetch(
-      `${baseUrl}/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=25&expand=version`,
+      `${baseUrl}/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=25&expand=version,space,history.lastUpdated`,
       { headers: hdrs },
     );
 

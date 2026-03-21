@@ -19,8 +19,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     // Serve from cache if available
     if (hasFreshCache(id, "confluence_pages")) {
-      const confluenceDocs = getCachedConfluencePages(id) ?? [];
-      const confluenceActivity = getCachedConfluenceActivity(id) ?? [];
+      const confluenceDocs = getCachedConfluencePages(id, ctx.spaceFilter) ?? [];
+      const confluenceActivity = getCachedConfluenceActivity(id, ctx.spaceFilter) ?? [];
       const docAuthorityLevel = Math.min(5, Math.max(1, confluenceDocs.length));
       const sync = getSyncStatus(id, "confluence_pages");
 

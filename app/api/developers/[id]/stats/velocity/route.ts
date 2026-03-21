@@ -19,8 +19,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     // Velocity and merge ratio derive from cached PRs
     if (hasFreshCache(id, "github_pull_requests")) {
-      const { velocity, velocityChange } = computeCachedVelocity(id, days);
-      const mergeRatio = computeCachedMergeRatio(id, days);
+      const { velocity, velocityChange } = computeCachedVelocity(id, days, ctx.repoFilter);
+      const mergeRatio = computeCachedMergeRatio(id, days, ctx.repoFilter);
       const sync = getSyncStatus(id, "github_pull_requests");
 
       const response: VelocityStatsResponse & { _syncedAt?: string } = {

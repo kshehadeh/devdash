@@ -74,9 +74,7 @@ export async function syncPullRequests(developerId: string): Promise<void> {
     .filter((s) => s.type === "github_repo")
     .map((s) => ({ org: s.org, name: s.identifier }));
 
-  if (ghRepos.length === 0) return;
-
-  const repoFilter = " " + ghRepos.map((r) => `repo:${r.org}/${r.name}`).join(" ");
+  const repoFilter = ghRepos.length > 0 ? " " + ghRepos.map((r) => `repo:${r.org}/${r.name}`).join(" ") : "";
 
   setSyncStatus(developerId, "github_pull_requests", "syncing");
 

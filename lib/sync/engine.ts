@@ -1,6 +1,6 @@
 import { getDb } from "../db/index";
 import { syncContributions, syncPullRequests } from "./github-sync";
-import { syncCompletedTickets, syncConfluencePages } from "./atlassian-sync";
+import { syncJiraTickets, syncConfluencePages } from "./atlassian-sync";
 
 let _syncing = false;
 
@@ -8,7 +8,7 @@ export async function syncDeveloper(developerId: string): Promise<void> {
   const syncFns = [
     () => syncContributions(developerId),
     () => syncPullRequests(developerId),
-    () => syncCompletedTickets(developerId),
+    () => syncJiraTickets(developerId),
     () => syncConfluencePages(developerId),
   ];
 
@@ -85,8 +85,8 @@ function pruneStaleData(): void {
     const r2 = db.prepare("DELETE FROM cached_pull_requests WHERE created_at < ? AND status != 'open'").run(cutoff);
     totalDeleted += r2.changes;
 
-    // 3. Prune completed tickets resolved more than 1 year ago
-    const r3 = db.prepare("DELETE FROM cached_completed_tickets WHERE resolved_at < ?").run(cutoff);
+    // 3. Prune jira tickets not updated in over 1 year
+    const r3 = db.prepare("DELETE FROM cached_jira_tickets WHERE updated_at < ?").run(cutoff);
     totalDeleted += r3.changes;
 
     // 4. Prune confluence pages not modified in over 1 year
@@ -96,7 +96,7 @@ function pruneStaleData(): void {
     // 5. Remove orphaned cache data for deleted developers
     const orphanTables = [
       "cached_contributions", "cached_pull_requests",
-      "cached_completed_tickets", "cached_confluence_pages", "sync_log",
+      "cached_jira_tickets", "cached_confluence_pages", "sync_log",
     ];
     for (const table of orphanTables) {
       const rows = db.prepare(`SELECT DISTINCT developer_id FROM ${table}`).all() as { developer_id: string }[];

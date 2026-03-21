@@ -126,6 +126,51 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX IF NOT EXISTS idx_cached_confluence_dev_modified ON cached_confluence_pages(developer_id, last_modified);
   `,
+  // v5 — broaden Jira cache to all ticket statuses; relax sync_log data_type constraint
+  `
+  -- Recreate sync_log without the restrictive data_type CHECK so new types can be added freely
+  ALTER TABLE sync_log RENAME TO sync_log_old;
+
+  CREATE TABLE sync_log (
+    developer_id TEXT NOT NULL,
+    data_type TEXT NOT NULL,
+    last_synced_at TEXT NOT NULL,
+    last_cursor TEXT,
+    status TEXT NOT NULL DEFAULT 'ok' CHECK(status IN ('ok', 'error', 'syncing')),
+    error_message TEXT,
+    PRIMARY KEY (developer_id, data_type),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+
+  INSERT OR IGNORE INTO sync_log SELECT * FROM sync_log_old WHERE data_type NOT IN ('jira_completed_tickets');
+  DROP TABLE sync_log_old;
+
+  -- New table: all assigned Jira tickets regardless of status
+  CREATE TABLE IF NOT EXISTS cached_jira_tickets (
+    developer_id TEXT NOT NULL,
+    issue_key TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT '',
+    status_category TEXT NOT NULL DEFAULT 'todo',
+    project_key TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (developer_id, issue_key),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_cached_jira_tickets_dev ON cached_jira_tickets(developer_id, updated_at);
+
+  -- Migrate existing completed tickets into the new table
+  INSERT OR IGNORE INTO cached_jira_tickets
+    (developer_id, issue_key, summary, status, status_category, project_key, updated_at)
+  SELECT developer_id, issue_key, summary, 'Done', 'done', project_key, resolved_at
+  FROM cached_completed_tickets;
+  `,
+  // v6 — add priority and issue_type columns to cached_jira_tickets
+  `
+  ALTER TABLE cached_jira_tickets ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium';
+  ALTER TABLE cached_jira_tickets ADD COLUMN issue_type TEXT NOT NULL DEFAULT 'Task';
+  `,
 ];
 
 

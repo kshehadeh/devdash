@@ -203,7 +203,6 @@ export async function fetchJiraTickets(
   projectKeys?: string[],
   days = 30,
 ): Promise<JiraTicket[]> {
-  if (projectKeys !== undefined && projectKeys.length === 0) return [];
 
   const baseUrl = `https://${site}.atlassian.net`;
   const hdrs = headers(email, token);
@@ -280,7 +279,6 @@ export async function fetchCompletedTicketCount(
   projectKeys?: string[],
   days = 30,
 ): Promise<number> {
-  if (projectKeys !== undefined && projectKeys.length === 0) return 0;
 
   const baseUrl = `https://${site}.atlassian.net`;
 
@@ -296,7 +294,7 @@ export async function fetchCompletedTicketCount(
     : "";
 
   // Use "status changed" + date filter — "resolved" field may not be set on all instances
-  const jql = `assignee = "${accountId}" AND statusCategory = Done AND status changed AFTER "${since}"${projectFilter}`;
+  const jql = `assignee = "${accountId}" AND statusCategory = Done AND updated >= "${since}"${projectFilter}`;
   console.log("[CompletedTickets] JQL:", jql);
 
   const res = await fetch(`${baseUrl}/rest/api/3/search/jql`, {
@@ -400,7 +398,6 @@ export async function fetchConfluenceDocs(
   atlassianEmail: string,
   spaceKeys?: string[],
 ): Promise<ConfluenceDoc[]> {
-  if (spaceKeys !== undefined && spaceKeys.length === 0) return [];
 
   const baseUrl = `https://${site}.atlassian.net/wiki`;
   const hdrs = headers(email, token);
@@ -417,7 +414,7 @@ export async function fetchConfluenceDocs(
     : "";
   const cql = `contributor = "${accountId}" AND type = page${spaceFilter} ORDER BY lastmodified DESC`;
   const res = await fetch(
-    `${baseUrl}/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=10&expand=version`,
+    `${baseUrl}/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=10&expand=version,space`,
     { headers: hdrs },
   );
 
@@ -459,7 +456,6 @@ export async function fetchConfluenceActivity(
   atlassianEmail: string,
   spaceKeys?: string[],
 ): Promise<ConfluenceActivity[]> {
-  if (spaceKeys !== undefined && spaceKeys.length === 0) return [];
 
   const baseUrl = `https://${site}.atlassian.net/wiki`;
 
@@ -472,7 +468,7 @@ export async function fetchConfluenceActivity(
     : "";
   const cql = `contributor = "${accountId}" AND type = page${spaceFilter} ORDER BY lastmodified DESC`;
   const res = await fetch(
-    `${baseUrl}/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=5&expand=version,history.lastUpdated`,
+    `${baseUrl}/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=5&expand=version,space,history.lastUpdated`,
     { headers: headers(email, token) },
   );
 
