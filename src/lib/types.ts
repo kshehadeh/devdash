@@ -234,3 +234,13 @@ export interface AppNotification {
   type: AppNotificationType;
   createdAt: number;
 }
+
+// ---------- App updates ----------
+
+export type UpdateCheckResponse =
+  | { status: "up-to-date" }
+  | { status: "available"; version: string }
+  | { status: "skipped"; reason: string }
+  | { status: "error"; message: string };
+
+export type DownloadInstallResult = { ok: true } | { ok: false; message: string };

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation, Outlet } from "react-router-dom";
 import { AppStatusProvider } from "./context/AppStatusContext";
+import { UpdateProvider } from "./context/UpdateContext";
 import { SelectedDeveloperProvider } from "./context/SelectedDeveloperContext";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
@@ -9,6 +10,7 @@ import SettingsLayout from "./components/layout/SettingsLayout";
 import Connections from "./pages/settings/Connections";
 import Sources from "./pages/settings/Sources";
 import Cache from "./pages/settings/Cache";
+import General from "./pages/settings/General";
 import ReferenceLayout from "./components/layout/ReferenceLayout";
 import PullRequests from "./pages/reference/PullRequests";
 import Tickets from "./pages/reference/Tickets";
@@ -84,6 +86,7 @@ function RoutedApp() {
           <Route path="connections" element={<Connections />} />
           <Route path="sources" element={<Sources />} />
           <Route path="cache" element={<Cache />} />
+          <Route path="general" element={<General />} />
         </Route>
         <Route path="/reference" element={<ReferenceLayout />}>
           <Route index element={<Navigate to="pull-requests" replace />} />
@@ -99,10 +102,12 @@ function RoutedApp() {
 export default function App() {
   return (
     <AppStatusProvider>
-      {/* flex-col so route output (e.g. onboarding) stretches full width; row was shrinking to content width */}
-      <div className="flex h-full min-h-0 w-full flex-1 flex-col">
-        <RoutedApp />
-      </div>
+      <UpdateProvider>
+        {/* flex-col so route output (e.g. onboarding) stretches full width; row was shrinking to content width */}
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+          <RoutedApp />
+        </div>
+      </UpdateProvider>
     </AppStatusProvider>
   );
 }

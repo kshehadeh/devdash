@@ -1,9 +1,9 @@
 import { app, BrowserWindow, shell, protocol, net, Menu } from "electron";
-import { autoUpdater } from "electron-updater";
 import * as path from "path";
 import * as fs from "fs";
 import { registerAllHandlers } from "./ipc/index";
 import { runExportSettings, runImportSettings } from "./ipc/settings-io";
+import { initAutoUpdate } from "./updater-service";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -79,14 +79,6 @@ function createWindow() {
   });
 }
 
-function setupAutoUpdater() {
-  if (isDev) return;
-  autoUpdater.checkForUpdatesAndNotify();
-  autoUpdater.on("update-downloaded", () => {
-    autoUpdater.quitAndInstall();
-  });
-}
-
 function buildMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin"
@@ -153,7 +145,7 @@ app.whenReady().then(() => {
   registerAllHandlers(() => mainWindow);
   buildMenu();
   createWindow();
-  setupAutoUpdater();
+  initAutoUpdate(() => mainWindow, isDev);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

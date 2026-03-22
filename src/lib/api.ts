@@ -7,6 +7,7 @@ declare global {
       invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
       onMenuNavigate: (callback: (path: string) => void) => void;
       onSyncProgress: (callback: (payload: unknown) => void) => () => void;
+      onUpdateAvailable: (callback: (payload: { version: string }) => void) => () => void;
     };
   }
 }
