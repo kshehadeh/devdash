@@ -1,36 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DevDash
 
-## Getting Started
+A desktop developer dashboard that aggregates your code, work tracking, and documentation activity into a single view. Connect your tools — GitHub, Jira, Linear, Confluence — and get a real-time picture of your engineering impact.
 
-First, run the development server:
+![DevDash Dashboard](docs/images/dashboard.png)
+
+## Features
+
+- **Ecosystem Impact metrics** — velocity, merge ratio, workload health, ticket throughput, and documentation authority at a glance
+- **GitHub contributions** — heatmap, pull request history, and effort distribution (feature / bug fix / review)
+- **Work tracking** — Jira or Linear issues with status categories and workload scoring
+- **Documentation** — Confluence page edits, reads, and knowledge influence
+- **Multi-developer support** — track metrics for yourself or your team
+- **Offline-first** — SQLite cache with background sync so the dashboard loads instantly
+- **Auto-updates** — built-in update mechanism via GitHub Releases
+
+## Download
+
+DevDash is distributed as a macOS `.dmg`. Grab the latest release from [GitHub Releases](https://github.com/kshehadeh/devdash/releases).
+
+| Architecture | File |
+|---|---|
+| Apple Silicon (M1+) | `DevDash-<version>-arm64.dmg` |
+| Intel | `DevDash-<version>-x64.dmg` |
+
+After downloading, open the `.dmg` and drag **DevDash** into your Applications folder. On first launch, macOS may ask you to allow the app in **System Settings > Privacy & Security**.
+
+## Development
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 20+
+- [Bun](https://bun.sh/) (used as the package manager and script runner)
+
+### Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/kshehadeh/devdash.git
+cd devdash
+bun install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+If `better-sqlite3` fails to build against Electron's Node headers, run:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+bun run electron:rebuild
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Running locally
 
-## Learn More
+```bash
+bun run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+This starts Vite (renderer) and the Electron main process concurrently. The app will open automatically once the dev server is ready.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Building a distributable
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Local build (skips code-signing and notarization)
+bun run electron:build:local
 
-## Deploy on Vercel
+# Signed + notarized build for distribution
+bun run electron:build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Output goes to `dist-electron/`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture
+
+DevDash is an Electron app with a **Vite + React** renderer and a **Node.js main process** that owns SQLite, encrypted credentials, background sync, and vendor API clients. Communication between the two happens over IPC.
+
+The product is organized around three integration categories — **Code**, **Work**, and **Docs** — each backed by a pluggable provider:
+
+| Category | Providers |
+|---|---|
+| Code | GitHub |
+| Work | Jira, Linear |
+| Docs | Confluence |
+
+See [docs/architecture.md](docs/architecture.md) for the full system design and [docs/metrics.md](docs/metrics.md) for detailed metric definitions.
+
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+1. **Fork** the repository and create a feature branch from `main`.
+2. **Install dependencies** and make sure `bun run dev` works before you start.
+3. **Make your changes** — keep commits focused and follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat:`, `fix:`, `docs:`).
+4. **Test locally** — run the app and verify your changes work end-to-end.
+5. **Open a pull request** against `main` with a clear description of what changed and why.
+
+### Adding a new integration provider
+
+If you want to add support for a new tool (e.g. Bitbucket, Notion, GitLab), see the [architecture doc](docs/architecture.md#extending-with-a-new-provider-checklist) for the full checklist covering sync tasks, cache tables, IPC handlers, and UI wiring.
+
+## License
+
+This project is private and not currently published under an open-source license.
