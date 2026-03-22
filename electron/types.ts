@@ -45,12 +45,14 @@ export interface ConfluenceDoc {
   title: string;
   reads: number;
   edits: number;
+  url?: string;
 }
 
 export interface ConfluenceActivity {
   type: "edit" | "comment";
   description: string;
   timeAgo: string;
+  url?: string;
 }
 
 export interface JiraTicket {

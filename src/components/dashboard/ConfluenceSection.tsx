@@ -28,7 +28,10 @@ export function ConfluenceSection({ docs, activity }: ConfluenceSectionProps) {
         {docs.map((doc) => (
           <div key={doc.title}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-[var(--on-surface)] leading-snug">{doc.title}</span>
+              <span
+                className={`text-sm text-[var(--on-surface)] leading-snug ${doc.url ? "cursor-pointer hover:text-[var(--primary)] hover:underline transition-colors" : ""}`}
+                onClick={() => doc.url && window.open(doc.url)}
+              >{doc.title}</span>
               <span className="text-xs font-label text-[var(--on-surface-variant)] shrink-0 ml-2">
                 {doc.reads > 0
                   ? `${doc.reads >= 1000 ? `${(doc.reads / 1000).toFixed(1)}k` : doc.reads} Reads • `
@@ -52,7 +55,11 @@ export function ConfluenceSection({ docs, activity }: ConfluenceSectionProps) {
         </div>
         <div className="flex flex-col gap-2">
           {activity.map((item, i) => (
-            <div key={i} className="flex items-center gap-3">
+            <div
+              key={i}
+              className={`flex items-center gap-3 ${item.url ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
+              onClick={() => item.url && window.open(item.url)}
+            >
               <div className="w-6 h-6 rounded-md bg-[var(--surface-container-highest)] flex items-center justify-center shrink-0">
                 {item.type === "edit" ? (
                   <FileEdit size={12} className="text-[var(--primary)]" />

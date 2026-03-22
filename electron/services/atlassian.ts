@@ -443,7 +443,12 @@ export async function fetchConfluenceDocs(
       } catch {
         // Views API may not be available
       }
-      return { title: page.title, reads, edits };
+      return {
+        title: page.title,
+        reads,
+        edits,
+        url: `${baseUrl}/pages/${page.id}`,
+      };
     }),
   );
 
@@ -482,6 +487,7 @@ export async function fetchConfluenceActivity(
       type: "edit" as const,
       description: `Updated ${page.title}`,
       timeAgo: timeAgo(when),
+      url: `${baseUrl}/pages/${page.id}`,
     };
   });
 }

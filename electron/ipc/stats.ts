@@ -127,8 +127,8 @@ export function registerStatsHandlers() {
     if (!ctx) throw new Error("Developer not found");
 
     if (hasFreshCache(id, "confluence_pages")) {
-      const confluenceDocs = getCachedConfluencePages(id, ctx.spaceFilter) ?? [];
-      const confluenceActivity = getCachedConfluenceActivity(id, ctx.spaceFilter) ?? [];
+      const confluenceDocs = getCachedConfluencePages(id, ctx.spaceFilter, ctx.atConn?.org ?? undefined) ?? [];
+      const confluenceActivity = getCachedConfluenceActivity(id, ctx.spaceFilter, ctx.atConn?.org ?? undefined) ?? [];
       const docAuthorityLevel = Math.min(5, Math.max(1, confluenceDocs.length));
       const sync = getSyncStatus(id, "confluence_pages");
       return { confluenceDocs, confluenceActivity, docAuthorityLevel, _syncedAt: sync?.lastSyncedAt };

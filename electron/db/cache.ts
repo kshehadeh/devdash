@@ -223,32 +223,38 @@ export function getCachedCompletedTicketCount(devId: string, days: number, proje
 
 // ---------- Confluence ----------
 
-export function getCachedConfluencePages(devId: string, spaceKeys?: string[]): ConfluenceDoc[] | null {
+export function getCachedConfluencePages(devId: string, spaceKeys?: string[], site?: string): ConfluenceDoc[] | null {
   if (!hasFreshCache(devId, "confluence_pages")) return null;
   const db = getDb();
   const { sql: spaceSql, values: spaceValues } = spaceClause(spaceKeys);
   const rows = db.prepare(
-    `SELECT title, view_count, version_count FROM cached_confluence_pages WHERE developer_id = ?${spaceSql} ORDER BY last_modified DESC LIMIT 10`,
-  ).all(devId, ...spaceValues) as { title: string; view_count: number; version_count: number }[];
+    `SELECT title, view_count, version_count, page_id, space_key FROM cached_confluence_pages WHERE developer_id = ?${spaceSql} ORDER BY last_modified DESC LIMIT 10`,
+  ).all(devId, ...spaceValues) as { title: string; view_count: number; version_count: number; page_id: string; space_key: string }[];
 
   return rows.map((row) => ({
     title: row.title,
     reads: row.view_count,
     edits: row.version_count,
+    url: site && row.space_key
+      ? `https://${site}.atlassian.net/wiki/spaces/${row.space_key}/pages/${row.page_id}`
+      : undefined,
   }));
 }
 
-export function getCachedConfluenceActivity(devId: string, spaceKeys?: string[]): { type: "edit"; description: string; timeAgo: string }[] | null {
+export function getCachedConfluenceActivity(devId: string, spaceKeys?: string[], site?: string): { type: "edit"; description: string; timeAgo: string; url?: string }[] | null {
   if (!hasFreshCache(devId, "confluence_pages")) return null;
   const db = getDb();
   const { sql: spaceSql, values: spaceValues } = spaceClause(spaceKeys);
   const rows = db.prepare(
-    `SELECT title, last_modified FROM cached_confluence_pages WHERE developer_id = ?${spaceSql} ORDER BY last_modified DESC LIMIT 5`,
-  ).all(devId, ...spaceValues) as { title: string; last_modified: string }[];
+    `SELECT title, last_modified, page_id, space_key FROM cached_confluence_pages WHERE developer_id = ?${spaceSql} ORDER BY last_modified DESC LIMIT 5`,
+  ).all(devId, ...spaceValues) as { title: string; last_modified: string; page_id: string; space_key: string }[];
 
   return rows.map((row) => ({
     type: "edit" as const,
     description: `Updated ${row.title}`,
     timeAgo: timeAgo(row.last_modified),
+    url: site && row.space_key
+      ? `https://${site}.atlassian.net/wiki/spaces/${row.space_key}/pages/${row.page_id}`
+      : undefined,
   }));
 }
