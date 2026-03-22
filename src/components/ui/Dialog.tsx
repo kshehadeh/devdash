@@ -30,12 +30,12 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
       {/* Backdrop */}
       <div className="absolute inset-0 bg-[var(--surface-container-lowest)]/70 backdrop-blur-sm" />
 
-      {/* Panel */}
+      {/* Panel — max height + scrollable body so long forms (e.g. data sources) stay usable */}
       <div
-        className="relative z-10 w-full max-w-md bg-[var(--surface-container-highest)]/90 backdrop-blur-xl rounded-lg shadow-2xl p-6"
+        className="relative z-10 flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-lg bg-[var(--surface-container-highest)]/90 shadow-2xl backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--outline-variant)]/20 px-6 py-4">
           <h2 className="text-base font-semibold text-[var(--on-surface)]">{title}</h2>
           <button
             onClick={onClose}
@@ -44,7 +44,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
             <X size={18} />
           </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );
