@@ -11,6 +11,50 @@ function atlAuth(email: string, token: string) {
   return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
 }
 
+/**
+ * Find spaces whose key or name contains the query (case-insensitive).
+ * Confluence Cloud CQL no longer reliably supports `type = space` on `/rest/api/search`, so we
+ * page through `/rest/api/space` and match locally — same as the UI search users expect for "ENG".
+ */
+async function searchConfluenceSpaces(
+  wikiBaseUrl: string,
+  hdrs: Record<string, string>,
+  query: string,
+): Promise<{ id: string | number; key: string; name: string; type: string }[]> {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+
+  const collected: { id: string | number; key: string; name: string; type: string }[] = [];
+  const seen = new Set<string>();
+  let start = 0;
+  const limit = 100;
+  /** Cap pages so huge sites do not hang settings (4k spaces scanned). */
+  const maxPages = 40;
+
+  for (let page = 0; page < maxPages; page++) {
+    const res = await fetch(`${wikiBaseUrl}/rest/api/space?limit=${limit}&start=${start}`, { headers: hdrs });
+    if (!res.ok) {
+      console.error("Confluence space list failed:", res.status, await res.text().catch(() => ""));
+      return collected;
+    }
+    const d = await res.json();
+    const batch = d.results ?? [];
+    for (const s of batch) {
+      if (!s?.key || seen.has(s.key)) continue;
+      const key = String(s.key);
+      const name = String(s.name ?? "");
+      if (key.toLowerCase().includes(needle) || name.toLowerCase().includes(needle)) {
+        seen.add(s.key);
+        collected.push({ id: s.id, key: s.key, name: s.name, type: s.type ?? "global" });
+      }
+    }
+    if (batch.length < limit) break;
+    start += batch.length;
+  }
+
+  return collected;
+}
+
 export function registerDiscoverHandlers() {
   ipcMain.handle("discover:github:orgs", async () => {
     const conn = getConnection("github");
@@ -96,19 +140,8 @@ export function registerDiscoverHandlers() {
     const hdrs = { Authorization: auth, Accept: "application/json" };
     const query = data?.q?.trim() ?? "";
 
-    if (query) {
-      const cql = `type = space AND title ~ "${query}"`;
-      const res = await fetch(`${baseUrl}/rest/api/search?cql=${encodeURIComponent(cql)}&limit=25`, { headers: hdrs });
-      if (res.ok) {
-        const d = await res.json();
-        return (d.results ?? []).filter((i: any) => (i.space ?? i).key).map((i: any) => { const s = i.space ?? i; return { id: s.id ?? 0, key: s.key, name: s.name, type: s.type ?? "global" }; });
-      }
-    }
-
-    const res = await fetch(`${baseUrl}/rest/api/space?limit=20`, { headers: hdrs });
-    if (!res.ok) throw new Error("Failed to fetch spaces");
-    const d = await res.json();
-    return (d.results ?? []).map((s: any) => ({ id: s.id, key: s.key, name: s.name, type: s.type }));
+    if (!query) return [];
+    return searchConfluenceSpaces(baseUrl, hdrs, query);
   });
 
   ipcMain.handle("discover:linear:teams", async () => {

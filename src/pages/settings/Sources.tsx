@@ -243,9 +243,11 @@ function SourceFormDialog({
   const [availableBoards, setAvailableBoards] = useState<{ id: number; name: string; type: string }[]>([]);
   const [boardsLoading, setBoardsLoading] = useState(false);
 
+  /** Session cache: every successful Confluence search is merged here so spaces stay selectable. */
   const [confluenceSpaces, setConfluenceSpaces] = useState<ComboboxOption[]>([]);
-  const [confluenceLoading, setConfluenceLoading] = useState(false);
   const [confluenceSearching, setConfluenceSearching] = useState(false);
+  /** Space keys from the last CQL response — shown while typing even when local substring filter would hide them. */
+  const [confluenceSearchMatchKeys, setConfluenceSearchMatchKeys] = useState<Set<string>>(() => new Set());
 
   const [linearTeams, setLinearTeams] = useState<ComboboxOption[]>([]);
   const [linearTeamsLoading, setLinearTeamsLoading] = useState(false);
@@ -347,35 +349,46 @@ function SourceFormDialog({
       .finally(() => setLinearTeamsLoading(false));
   }, [sourceType]);
 
-  // Fetch initial Confluence spaces on mount (small batch)
+  // Confluence: search-only; cache is seeded when editing an existing space.
   useEffect(() => {
     if (sourceType !== "confluence_space") return;
-    setConfluenceLoading(true);
-    invoke<{ key: string; name: string }[]>("discover:confluence:spaces")
-      .then((data) => {
-        setConfluenceSpaces(data.map((s) => ({ value: s.key, label: s.name, description: s.key })));
-      })
-      .catch(() => {})
-      .finally(() => setConfluenceLoading(false));
-  }, [sourceType]);
+    setConfluenceSearchMatchKeys(new Set());
+    if (isEdit && existing?.identifier) {
+      setConfluenceSpaces([
+        {
+          value: existing.identifier,
+          label: existing.name?.trim() || existing.identifier,
+          description: existing.identifier,
+        },
+      ]);
+    } else {
+      setConfluenceSpaces([]);
+    }
+  }, [sourceType, isEdit, existing?.id, existing?.identifier, existing?.name]);
 
-  // Server-side Confluence space search
+  /** CQL search; results merge into the session cache. Clearing the box does not clear the cache. */
   function handleConfluenceSearch(query: string) {
     if (!query) {
-      // Reset to initial batch
-      setConfluenceSearching(true);
-      invoke<{ key: string; name: string }[]>("discover:confluence:spaces")
-        .then((data) => {
-          setConfluenceSpaces(data.map((s) => ({ value: s.key, label: s.name, description: s.key })));
-        })
-        .catch(() => {})
-        .finally(() => setConfluenceSearching(false));
+      setConfluenceSearchMatchKeys(new Set());
+      setConfluenceSearching(false);
       return;
     }
     setConfluenceSearching(true);
     invoke<{ key: string; name: string }[]>("discover:confluence:spaces", { q: query })
       .then((data) => {
-        setConfluenceSpaces(data.map((s) => ({ value: s.key, label: s.name, description: s.key })));
+        setConfluenceSearchMatchKeys(new Set(data.map((s) => s.key)));
+        const additions = data.map((s) => ({ value: s.key, label: s.name, description: s.key }));
+        setConfluenceSpaces((prev) => {
+          const seen = new Set(prev.map((o) => o.value));
+          const merged = [...prev];
+          for (const o of additions) {
+            if (!seen.has(o.value)) {
+              seen.add(o.value);
+              merged.push(o);
+            }
+          }
+          return merged;
+        });
       })
       .catch(() => {})
       .finally(() => setConfluenceSearching(false));
@@ -557,10 +570,12 @@ function SourceFormDialog({
             value={identifier}
             onChange={handleSpaceSelect}
             onSearch={handleConfluenceSearch}
+            onSearchInput={() => setConfluenceSearchMatchKeys(new Set())}
+            searchMatchKeys={confluenceSearchMatchKeys}
             placeholder="Search for a Confluence space..."
             searchPlaceholder="Type to search spaces..."
-            minSearchLength={2}
-            loading={confluenceLoading}
+            emptyBrowseHint="Type to search Confluence. Spaces you load stay in this list until you close the dialog."
+            minSearchLength={1}
             searchLoading={confluenceSearching}
           />
         )}

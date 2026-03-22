@@ -14,14 +14,27 @@ interface ComboboxProps {
   options: ComboboxOption[];
   value: string;
   onChange: (value: string) => void;
+  /** Debounced server search; local filtering still applies to `options` on every keystroke. */
   onSearch?: (query: string) => void;
+  /** Called on every input change (before debounce). Use to clear stale server-hit keys. */
+  onSearchInput?: (query: string) => void;
+  /**
+   * Option values from the latest server search that should stay visible while typing even when
+   * they do not match the local substring filter (e.g. CQL matches name differently).
+   */
+  searchMatchKeys?: ReadonlySet<string>;
   placeholder?: string;
   loading?: boolean;
   searchLoading?: boolean;
   disabled?: boolean;
   label?: string;
   searchPlaceholder?: string;
+  /** Minimum trimmed length before `onSearch` runs (local filter ignores this). */
   minSearchLength?: number;
+  /** Delay before calling `onSearch` after typing stops (default 350ms). */
+  searchDebounceMs?: number;
+  /** Shown when there are no options, the search box is empty, and not loading (e.g. “Type to search…”). */
+  emptyBrowseHint?: string;
 }
 
 export function Combobox({
@@ -29,6 +42,8 @@ export function Combobox({
   value,
   onChange,
   onSearch,
+  onSearchInput,
+  searchMatchKeys,
   placeholder = "Select...",
   loading = false,
   searchLoading = false,
@@ -36,6 +51,8 @@ export function Combobox({
   label,
   searchPlaceholder = "Search...",
   minSearchLength = 0,
+  searchDebounceMs = 350,
+  emptyBrowseHint,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -45,31 +62,42 @@ export function Combobox({
 
   const selected = options.find((o) => o.value === value);
 
-  // Client-side filtering (only when no onSearch callback)
-  const filtered = onSearch
-    ? options
-    : query
-      ? options.filter(
+  function optionMatchesFilter(o: ComboboxOption, q: string): boolean {
+    const t = q.trim().toLowerCase();
+    if (!t) return true;
+    return (
+      o.label.toLowerCase().includes(t) ||
+      o.value.toLowerCase().includes(t) ||
+      !!o.description?.toLowerCase().includes(t)
+    );
+  }
+
+  const trimmedQuery = query.trim();
+  const filtered =
+    !trimmedQuery
+      ? options
+      : options.filter(
           (o) =>
-            o.label.toLowerCase().includes(query.toLowerCase()) ||
-            o.value.toLowerCase().includes(query.toLowerCase()) ||
-            o.description?.toLowerCase().includes(query.toLowerCase()),
-        )
-      : options;
+            optionMatchesFilter(o, query) ||
+            !!(searchMatchKeys?.size && searchMatchKeys.has(o.value)),
+        );
 
   const handleQueryChange = useCallback(
     (q: string) => {
       setQuery(q);
-      if (onSearch) {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => {
-          if (q.length >= minSearchLength) {
-            onSearch(q);
-          }
-        }, 300);
-      }
+      onSearchInput?.(q);
+      if (!onSearch) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        const trimmed = q.trim();
+        if (!trimmed) {
+          onSearch("");
+        } else if (trimmed.length >= minSearchLength) {
+          onSearch(trimmed);
+        }
+      }, searchDebounceMs);
     },
-    [onSearch, minSearchLength],
+    [onSearch, onSearchInput, minSearchLength, searchDebounceMs],
   );
 
   useEffect(() => {
@@ -94,7 +122,6 @@ export function Combobox({
     };
   }, []);
 
-  const showHint = onSearch && query.length < minSearchLength && query.length > 0;
   const isSearching = searchLoading;
 
   return (
@@ -107,7 +134,11 @@ export function Combobox({
       <button
         type="button"
         disabled={disabled || loading}
-        onClick={() => { setOpen(!open); setQuery(""); }}
+        onClick={() => {
+          setOpen(!open);
+          setQuery("");
+          onSearchInput?.("");
+        }}
         className={clsx(
           "w-full flex items-center gap-2 bg-[var(--surface-container-lowest)] text-sm rounded-md px-3 py-2.5 outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors text-left",
           disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-[var(--surface-container-low)]",
@@ -146,13 +177,15 @@ export function Combobox({
             />
           </div>
           <div className="overflow-y-auto">
-            {showHint ? (
+            {filtered.length === 0 ? (
               <div className="px-3 py-4 text-xs text-[var(--on-surface-variant)] text-center">
-                Type at least {minSearchLength} character{minSearchLength !== 1 ? "s" : ""} to search
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="px-3 py-4 text-xs text-[var(--on-surface-variant)] text-center">
-                {isSearching ? "Searching..." : query ? "No results found" : "Start typing to search"}
+                {isSearching
+                  ? "Searching..."
+                  : query.trim()
+                    ? "No results found"
+                    : options.length === 0 && emptyBrowseHint
+                      ? emptyBrowseHint
+                      : "No options"}
               </div>
             ) : (
               filtered.map((option) => (
@@ -163,6 +196,7 @@ export function Combobox({
                     onChange(option.value);
                     setOpen(false);
                     setQuery("");
+                    onSearchInput?.("");
                   }}
                   className={clsx(
                     "w-full text-left px-3 py-2.5 hover:bg-[var(--surface-bright)] transition-colors",
