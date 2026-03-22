@@ -44,7 +44,7 @@ export function registerStatsHandlers() {
     }
 
     if (!contribCached || !prCached) {
-      syncDeveloper(id).catch((err) => console.error("[stats:github] Background sync error:", err));
+      syncDeveloper(id, { silent: true }).catch((err) => console.error("[stats:github] Background sync error:", err));
     }
 
     let commitHistory: CommitDay[] = [];
@@ -75,7 +75,7 @@ export function registerStatsHandlers() {
       return { velocity, velocityChange, mergeRatio, _syncedAt: sync?.lastSyncedAt };
     }
 
-    syncDeveloper(id).catch((err) => console.error("[stats:velocity] Background sync error:", err));
+    syncDeveloper(id, { silent: true }).catch((err) => console.error("[stats:velocity] Background sync error:", err));
     let velocity = 0, velocityChange = 0, mergeRatio = 0;
 
     if (ctx.ghConn?.connected && ctx.ghConn.token && ctx.ghUsername) {
@@ -103,7 +103,7 @@ export function registerStatsHandlers() {
     }
 
     if (ctx.atConn?.connected && ctx.atConn.token && ctx.atConn.email && ctx.atConn.org && ctx.atEmail) {
-      syncDeveloper(id).catch((err) => console.error("[stats:tickets] Background sync error:", err));
+      syncDeveloper(id, { silent: true }).catch((err) => console.error("[stats:tickets] Background sync error:", err));
     }
 
     let jiraTickets: JiraTicket[] = [];
@@ -134,7 +134,7 @@ export function registerStatsHandlers() {
       return { confluenceDocs, confluenceActivity, docAuthorityLevel, _syncedAt: sync?.lastSyncedAt };
     }
 
-    syncDeveloper(id).catch((err) => console.error("[stats:confluence] Background sync error:", err));
+    syncDeveloper(id, { silent: true }).catch((err) => console.error("[stats:confluence] Background sync error:", err));
     let confluenceDocs: ConfluenceDoc[] = [];
     let confluenceActivity: ConfluenceActivity[] = [];
 

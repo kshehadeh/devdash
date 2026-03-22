@@ -10,6 +10,7 @@ import { ConfluenceSection } from "@/components/dashboard/ConfluenceSection";
 import { EffortDistribution } from "@/components/dashboard/EffortDistribution";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
 import { invoke, useIpc } from "@/lib/api";
+import { useAppStatus } from "@/context/AppStatusContext";
 import type {
   Developer,
   GithubStatsResponse,
@@ -26,17 +27,6 @@ const LOOKBACK_OPTIONS = [
   { days: 90, label: "90 days" },
 ];
 
-function formatSyncTime(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-
 export default function DashboardPage() {
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [selectedDevId, setSelectedDevId] = useState<string>(() => {
@@ -47,8 +37,8 @@ export default function DashboardPage() {
     return stored ? parseInt(stored, 10) : 30;
   });
   const [loading, setLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSyncedAt: string | null }>({ syncing: false, lastSyncedAt: null });
   const [refreshing, setRefreshing] = useState(false);
+  const { syncing, refreshSyncStatus } = useAppStatus();
 
   useEffect(() => {
     localStorage.setItem("devdash.selectedDevId", selectedDevId);
@@ -77,36 +67,18 @@ export default function DashboardPage() {
     fetchDevelopers();
   }, [fetchDevelopers]);
 
-  // Poll sync status every 30 seconds
-  useEffect(() => {
-    const fetchSyncStatus = async () => {
-      try {
-        const data = await invoke<any>("sync:status");
-        const devStatus = data.developers?.find((d: { id: string }) => d.id === selectedDevId);
-        setSyncStatus({
-          syncing: data.syncing,
-          lastSyncedAt: devStatus?.lastSyncedAt ?? null,
-        });
-      } catch { /* ignore */ }
-    };
-    fetchSyncStatus();
-    const id = setInterval(fetchSyncStatus, 30000);
-    return () => clearInterval(id);
-  }, [selectedDevId]);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await invoke("sync:trigger", { developerId: selectedDevId });
-      // Wait a moment for sync to start, then poll status
-      await new Promise((r) => setTimeout(r, 1000));
-      setSyncStatus((prev) => ({ ...prev, syncing: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      await refreshSyncStatus();
     } catch (err) {
       console.error("Failed to trigger sync:", err);
     } finally {
       setRefreshing(false);
     }
-  }, [selectedDevId]);
+  }, [selectedDevId, refreshSyncStatus]);
 
   const github = useIpc<GithubStatsResponse>(selectedDevId ? "stats:github" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
@@ -159,27 +131,15 @@ export default function DashboardPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                {/* Sync status */}
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full ${
-                      syncStatus.syncing ? "bg-amber-400 animate-pulse"
-                        : syncStatus.lastSyncedAt ? "bg-emerald-400"
-                        : "bg-[var(--outline)]"
-                    }`}
-                  />
-                  <span className="text-[10px] font-label text-[var(--on-surface-variant)]">
-                    {syncStatus.syncing ? "Syncing..." : syncStatus.lastSyncedAt ? `Synced ${formatSyncTime(syncStatus.lastSyncedAt)}` : "Not synced"}
-                  </span>
-                  <button
-                    onClick={handleRefresh}
-                    disabled={refreshing || syncStatus.syncing}
-                    className="p-1 rounded hover:bg-[var(--surface-container-high)] transition-colors disabled:opacity-40"
-                    title="Refresh data"
-                  >
-                    <RefreshCw size={12} className={`text-[var(--on-surface-variant)] ${refreshing || syncStatus.syncing ? "animate-spin" : ""}`} />
-                  </button>
-                </div>
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing || syncing}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--surface-container-high)] transition-colors disabled:opacity-40"
+                  title="Sync data from GitHub, Jira & Confluence"
+                >
+                  <RefreshCw size={14} className={`text-[var(--on-surface-variant)] ${refreshing || syncing ? "animate-spin" : ""}`} />
+                  <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Sync</span>
+                </button>
 
                 <div className="w-px h-4 bg-[var(--outline-variant)]/30" />
 

@@ -171,6 +171,24 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE cached_jira_tickets ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium';
   ALTER TABLE cached_jira_tickets ADD COLUMN issue_type TEXT NOT NULL DEFAULT 'Task';
   `,
+  // v7 — review queue cache + PR review signals on cached_pull_requests
+  `
+  ALTER TABLE cached_pull_requests ADD COLUMN latest_review_state TEXT;
+  ALTER TABLE cached_pull_requests ADD COLUMN pending_reviewers_json TEXT NOT NULL DEFAULT '[]';
+
+  CREATE TABLE IF NOT EXISTS cached_review_requests (
+    developer_id TEXT NOT NULL,
+    repo TEXT NOT NULL,
+    pr_number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    author_login TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (developer_id, repo, pr_number),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_cached_review_req_dev ON cached_review_requests(developer_id);
+  `,
 ];
 
 

@@ -1,5 +1,12 @@
 // @ts-nocheck — copied from lib/services, fetch().json() returns unknown in strict mode
-import type { CommitDay, PullRequest, DeveloperStats } from "../types";
+import type {
+  CommitDay,
+  PullRequest,
+  DeveloperStats,
+  MyPRReviewItem,
+  PullReviewState,
+  ReviewRequestItem,
+} from "../types";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_GRAPHQL = "https://api.github.com/graphql";
@@ -37,6 +44,7 @@ interface GitHubPR {
   requested_reviewers: { login: string }[];
   review_comments: number;
   repository_url: string;
+  user?: { login: string };
 }
 
 interface SearchPRResponse {
@@ -62,6 +70,110 @@ function timeAgo(dateStr: string): string {
   if (days < 7) return `${days}d ago`;
   const weeks = Math.floor(days / 7);
   return `${weeks}w ago`;
+}
+
+/** Space-separated `repo:org/name` qualifiers for GitHub issue search (max ~20 results per call). */
+function repoQuerySuffix(repos?: { org: string; name: string }[]): string {
+  if (!repos || repos.length === 0) return "";
+  return " " + repos.map((r) => `repo:${r.org}/${r.name}`).join(" ");
+}
+
+const MEANINGFUL_REVIEW_STATES = new Set(["APPROVED", "CHANGES_REQUESTED", "COMMENTED"]);
+
+/** Shared by sync (cache) and live fetchers. */
+export function latestReviewStateFromReviews(reviews: { state: string }[]): PullReviewState {
+  for (let i = reviews.length - 1; i >= 0; i--) {
+    const s = reviews[i].state;
+    if (MEANINGFUL_REVIEW_STATES.has(s)) return s as PullReviewState;
+  }
+  return null;
+}
+
+/**
+ * Open PRs where the user was asked to review directly (excluding PRs they authored).
+ * Uses `user-review-requested:` so team-only requests (where the user is only covered via
+ * `review-requested:` / membership in a requested team) are omitted — see GitHub search docs.
+ */
+export async function fetchReviewRequests(
+  token: string,
+  username: string,
+  repos?: { org: string; name: string }[],
+  limit = 20,
+): Promise<ReviewRequestItem[]> {
+  const repo = repoQuerySuffix(repos);
+  const q = `type:pr is:open user-review-requested:${username} -author:${username}${repo} sort:updated-desc`.trim();
+  const url = `${GITHUB_API}/search/issues?q=${encodeURIComponent(q)}&per_page=${Math.min(limit, 100)}`;
+  const res = await fetch(url, { headers: headers(token) });
+  if (!res.ok) return [];
+
+  const data: SearchPRResponse = await res.json();
+  const items = data.items ?? [];
+
+  return items.slice(0, limit).map((item) => {
+    const repoPath = item.repository_url.replace("https://api.github.com/repos/", "");
+    return {
+      id: `rr-${repoPath.replace(/\//g, "-")}-${item.number}`,
+      title: item.title,
+      repo: repoPath,
+      number: item.number,
+      url: item.html_url,
+      authorLogin: item.user?.login ?? "unknown",
+      updatedAt: item.updated_at,
+      timeAgo: timeAgo(item.updated_at),
+    };
+  });
+}
+
+/** Open PRs the user authored, with review counts, latest review outcome, and pending reviewers. */
+export async function fetchMyOpenPRsWithReviewSignals(
+  token: string,
+  username: string,
+  repos?: { org: string; name: string }[],
+  limit = 20,
+): Promise<MyPRReviewItem[]> {
+  const repo = repoQuerySuffix(repos);
+  const q = `type:pr is:open author:${username}${repo} sort:updated-desc`.trim();
+  const url = `${GITHUB_API}/search/issues?q=${encodeURIComponent(q)}&per_page=${Math.min(limit, 100)}`;
+  const res = await fetch(url, { headers: headers(token) });
+  if (!res.ok) return [];
+
+  const data: SearchPRResponse = await res.json();
+  const items = (data.items ?? []).slice(0, limit);
+
+  return Promise.all(
+    items.map(async (item) => {
+      const repoPath = item.repository_url.replace("https://api.github.com/repos/", "");
+      let reviewCount = 0;
+      let latestReviewState: PullReviewState = null;
+      try {
+        const revRes = await fetch(
+          `${GITHUB_API}/repos/${repoPath}/pulls/${item.number}/reviews`,
+          { headers: headers(token) },
+        );
+        if (revRes.ok) {
+          const reviews: { state: string }[] = await revRes.json();
+          reviewCount = reviews.length;
+          latestReviewState = latestReviewStateFromReviews(reviews);
+        }
+      } catch {
+        /* ignore */
+      }
+
+      return {
+        id: `my-${repoPath.replace(/\//g, "-")}-${item.number}`,
+        title: item.title,
+        repo: repoPath,
+        number: item.number,
+        url: item.html_url,
+        status: "open" as const,
+        updatedAt: item.updated_at,
+        timeAgo: timeAgo(item.updated_at),
+        reviewCount,
+        latestReviewState,
+        pendingReviewerLogins: (item.requested_reviewers ?? []).map((r) => r.login),
+      };
+    }),
+  );
 }
 
 export async function fetchContributionCalendar(

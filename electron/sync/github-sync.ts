@@ -3,7 +3,7 @@ import { getDb } from "../db/index";
 import { getConnection } from "../db/connections";
 import { getDeveloper } from "../db/developers";
 import { getSourcesForDeveloper } from "../db/sources";
-import { fetchContributionCalendar } from "../services/github";
+import { fetchContributionCalendar, fetchReviewRequests, latestReviewStateFromReviews } from "../services/github";
 
 const GITHUB_API = "https://api.github.com";
 
@@ -23,8 +23,39 @@ interface SearchPRItem {
   created_at: string;
   updated_at: string;
   repository_url: string;
-  requested_reviewers: { login: string }[];
-  review_comments: number;
+  requested_reviewers?: { login: string }[];
+  review_comments?: number;
+  user?: { login: string };
+}
+
+async function enrichPullForCache(pr: SearchPRItem, token: string) {
+  const repoPath = pr.repository_url.replace("https://api.github.com/repos/", "");
+  let reviewCount =
+    typeof pr.review_comments === "number"
+      ? pr.review_comments
+      : (pr.requested_reviewers?.length ?? 0);
+  let latestState = null;
+  const pendingLogins = (pr.requested_reviewers ?? []).map((r) => r.login);
+  let pendingJson = JSON.stringify(pendingLogins);
+
+  if (pr.state === "open") {
+    try {
+      const res = await fetch(`${GITHUB_API}/repos/${repoPath}/pulls/${pr.number}/reviews`, {
+        headers: headers(token),
+      });
+      if (res.ok) {
+        const reviews = await res.json();
+        reviewCount = reviews.length;
+        latestState = latestReviewStateFromReviews(reviews);
+      }
+    } catch {
+      /* ignore */
+    }
+  } else {
+    pendingJson = "[]";
+  }
+
+  return { pr, repoPath, reviewCount, latestState, pendingJson };
 }
 
 // ---------- Contributions Sync ----------
@@ -114,36 +145,41 @@ export async function syncPullRequests(developerId: string): Promise<void> {
       page++;
     }
 
-    // Fetch review counts for open PRs
-    const withReviews = await Promise.all(
-      allPRs.map(async (pr) => {
-        if (pr.state !== "open") return pr;
-        try {
-          const repoPath = pr.repository_url.replace("https://api.github.com/repos/", "");
-          const res = await fetch(`${GITHUB_API}/repos/${repoPath}/pulls/${pr.number}/reviews`, {
-            headers: headers(token),
-          });
-          if (res.ok) {
-            const reviews: { state: string }[] = await res.json();
-            return { ...pr, review_comments: reviews.length };
-          }
-        } catch { /* ignore */ }
-        return pr;
-      }),
+    const reviewQueuePromise = fetchReviewRequests(
+      token,
+      username,
+      ghRepos.length > 0 ? ghRepos : undefined,
+      100,
     );
 
-    // Upsert into cache
+    const incrementalEnriched = await Promise.all(allPRs.map((pr) => enrichPullForCache(pr, token)));
+
+    // Refresh open PR review signals every sync (incremental query can miss idle open PRs)
+    const openQ = `type:pr is:open author:${username}${repoFilter} sort:updated-desc`.trim();
+    const openUrl = `${GITHUB_API}/search/issues?q=${encodeURIComponent(openQ)}&per_page=30`;
+    const openRes = await fetch(openUrl, { headers: headers(token) });
+    const openItems: SearchPRItem[] = openRes.ok ? ((await openRes.json()).items ?? []) : [];
+    const openEnriched = await Promise.all(openItems.map((pr) => enrichPullForCache(pr, token)));
+
+    const reviewQueue = await reviewQueuePromise;
+
     const upsert = db.prepare(`
       INSERT OR REPLACE INTO cached_pull_requests
-        (developer_id, pr_number, repo, title, status, review_count, created_at, updated_at, merged_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (developer_id, pr_number, repo, title, status, review_count, created_at, updated_at, merged_at, latest_review_state, pending_reviewers_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const insertReviewReq = db.prepare(`
+      INSERT OR REPLACE INTO cached_review_requests
+        (developer_id, repo, pr_number, title, author_login, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     let latestUpdated = since;
 
     db.transaction(() => {
-      for (const pr of withReviews) {
-        const repoPath = pr.repository_url.replace("https://api.github.com/repos/", "");
+      const runUpsert = (e: Awaited<ReturnType<typeof enrichPullForCache>>) => {
+        const pr = e.pr;
         let status: "open" | "merged" | "closed" = "open";
         if (pr.merged_at) status = "merged";
         else if (pr.state === "closed") status = "closed";
@@ -151,16 +187,26 @@ export async function syncPullRequests(developerId: string): Promise<void> {
         upsert.run(
           developerId,
           pr.number,
-          repoPath,
+          e.repoPath,
           pr.title,
           status,
-          pr.review_comments || pr.requested_reviewers?.length || 0,
+          e.reviewCount,
           pr.created_at,
           pr.updated_at,
           pr.merged_at ?? null,
+          e.latestState,
+          e.pendingJson,
         );
 
         if (pr.updated_at > latestUpdated) latestUpdated = pr.updated_at;
+      };
+
+      for (const e of incrementalEnriched) runUpsert(e);
+      for (const e of openEnriched) runUpsert(e);
+
+      db.prepare("DELETE FROM cached_review_requests WHERE developer_id = ?").run(developerId);
+      for (const r of reviewQueue) {
+        insertReviewReq.run(developerId, r.repo, r.number, r.title, r.authorLogin, r.updatedAt);
       }
     })();
 

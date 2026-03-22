@@ -6,6 +6,7 @@ declare global {
       platform: string;
       invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
       onMenuNavigate: (callback: (path: string) => void) => void;
+      onSyncProgress: (callback: (payload: unknown) => void) => () => void;
     };
   }
 }
@@ -18,13 +19,17 @@ export interface IpcState<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
+  /** Re-invoke the channel with the same args (same as initial load). */
+  refresh: () => void;
 }
+
+const noopRefresh = () => {};
 
 export function useIpc<T>(
   channel: string | null,
   args?: unknown[],
 ): IpcState<T> {
-  const [state, setState] = useState<IpcState<T>>({ data: null, loading: true, error: null });
+  const [state, setState] = useState<Omit<IpcState<T>, "refresh">>({ data: null, loading: true, error: null });
 
   // Serialize args to detect changes
   const argsKey = JSON.stringify(args ?? []);
@@ -47,5 +52,5 @@ export function useIpc<T>(
     refresh();
   }, [channel, refresh]);
 
-  return state;
+  return { ...state, refresh: channel ? refresh : noopRefresh };
 }

@@ -21,6 +21,41 @@ export interface PullRequest {
   isActive?: boolean;
 }
 
+export type PullReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | null;
+
+export interface ReviewRequestItem {
+  id: string;
+  title: string;
+  repo: string;
+  number: number;
+  url: string;
+  authorLogin: string;
+  updatedAt: string;
+  timeAgo: string;
+}
+
+export interface MyPRReviewItem {
+  id: string;
+  title: string;
+  repo: string;
+  number: number;
+  url: string;
+  status: "open";
+  updatedAt: string;
+  timeAgo: string;
+  reviewCount: number;
+  latestReviewState: PullReviewState;
+  pendingReviewerLogins: string[];
+}
+
+export interface ReviewsResponse {
+  requestedOfYou: ReviewRequestItem[];
+  onYourPullRequests: MyPRReviewItem[];
+  error?: string;
+  /** Present when served from pull-request cache after a successful sync */
+  _syncedAt?: string;
+}
+
 export interface SprintIssue {
   id: string;
   key: string;

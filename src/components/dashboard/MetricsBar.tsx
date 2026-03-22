@@ -25,20 +25,21 @@ interface MetricDef {
 }
 
 function MetricCard({ icon: Icon, label, value, sub, subColor, period, description }: MetricDef) {
+  const hasCorner = Boolean(period || description);
   return (
-    <div className="bg-[var(--surface-container)] rounded-md p-4 flex gap-3 items-start relative">
+    <div className="bg-[var(--surface-container)] rounded-md p-4 flex gap-3 items-start relative min-w-0">
       <div className="w-8 h-8 rounded-md bg-[var(--surface-container-highest)] flex items-center justify-center shrink-0">
         <Icon size={16} className="text-[var(--primary)]" />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className={`min-w-0 flex-1 ${hasCorner ? "pr-10" : ""}`}>
         <div className="flex items-center mb-1 min-w-0 overflow-hidden">
           <span className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider truncate">
             {label}
           </span>
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-[var(--on-surface)] leading-none">{value}</span>
-          <span className={`text-xs font-label font-semibold ${subColor}`}>{sub}</span>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
+          <span className="text-2xl font-bold text-[var(--on-surface)] leading-none shrink-0">{value}</span>
+          <span className={`text-xs font-label font-semibold min-w-0 break-words ${subColor}`}>{sub}</span>
         </div>
       </div>
       <div className="absolute bottom-2 right-2 flex items-center gap-1">

@@ -21,6 +21,40 @@ export interface PullRequest {
   isActive?: boolean;
 }
 
+export type PullReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | null;
+
+export interface ReviewRequestItem {
+  id: string;
+  title: string;
+  repo: string;
+  number: number;
+  url: string;
+  authorLogin: string;
+  updatedAt: string;
+  timeAgo: string;
+}
+
+export interface MyPRReviewItem {
+  id: string;
+  title: string;
+  repo: string;
+  number: number;
+  url: string;
+  status: "open";
+  updatedAt: string;
+  timeAgo: string;
+  reviewCount: number;
+  latestReviewState: PullReviewState;
+  pendingReviewerLogins: string[];
+}
+
+export interface ReviewsResponse {
+  requestedOfYou: ReviewRequestItem[];
+  onYourPullRequests: MyPRReviewItem[];
+  error?: string;
+  _syncedAt?: string;
+}
+
 export interface SprintIssue {
   id: string;
   key: string;
@@ -152,4 +186,42 @@ export interface DataSource {
 export interface DeveloperSourceAssignment {
   developerId: string;
   sourceId: string;
+}
+
+// ---------- Sync / status bar ----------
+
+export type SyncScope = "idle" | "full" | "single";
+
+export interface SyncProgressPayload {
+  syncing: boolean;
+  scope: SyncScope;
+  developerName?: string;
+  developerIndex?: number;
+  developerTotal?: number;
+  completedSteps: number;
+  totalSteps: number;
+  activeLabels: string[];
+  phase: "sync" | "prune";
+}
+
+export interface SyncStatusDeveloper {
+  id: string;
+  name: string;
+  lastSyncedAt: string | null;
+  types: Record<string, { lastSyncedAt: string; status: string; errorMessage: string | null }>;
+}
+
+export interface SyncStatusResponse {
+  syncing: boolean;
+  developers: SyncStatusDeveloper[];
+  progress: SyncProgressPayload;
+}
+
+export type AppNotificationType = "info" | "success" | "warning" | "error";
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  type: AppNotificationType;
+  createdAt: number;
 }

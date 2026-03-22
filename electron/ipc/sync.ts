@@ -1,12 +1,14 @@
 import { ipcMain } from "electron";
-import { syncAll, syncDeveloper, isSyncing } from "../sync/engine";
+import { syncAll, syncDeveloper, isSyncing, getSyncProgress } from "../sync/engine";
 import { getDb } from "../db/index";
 import { getAllSyncStatuses } from "../db/cache";
 
 export function registerSyncHandlers() {
   ipcMain.handle("sync:trigger", (_e, data?: { developerId?: string }) => {
     if (data?.developerId) {
-      syncDeveloper(data.developerId).catch((err) => console.error("[sync:trigger] Developer sync error:", err));
+      syncDeveloper(data.developerId, { scope: "single", devIndex: 1, devTotal: 1 }).catch((err) =>
+        console.error("[sync:trigger] Developer sync error:", err),
+      );
     } else {
       syncAll().catch((err) => console.error("[sync:trigger] Full sync error:", err));
     }
@@ -24,6 +26,6 @@ export function registerSyncHandlers() {
       return { id: dev.id, name: dev.name, lastSyncedAt, types };
     });
 
-    return { syncing: isSyncing(), developers };
+    return { syncing: isSyncing(), developers, progress: getSyncProgress() };
   });
 }

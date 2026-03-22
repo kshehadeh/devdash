@@ -1,21 +1,122 @@
 import { getDb } from "../db/index";
 import { syncContributions, syncPullRequests } from "./github-sync";
 import { syncJiraTickets, syncConfluencePages } from "./atlassian-sync";
+import { broadcastSyncProgress, type SyncProgressPayload } from "./progress-broadcast";
 
 let _syncing = false;
+/** Non-silent syncDeveloper calls in flight (manual / full sync tasks). */
+let _foregroundSyncDepth = 0;
 
-export async function syncDeveloper(developerId: string): Promise<void> {
-  const syncFns = [
-    () => syncContributions(developerId),
-    () => syncPullRequests(developerId),
-    () => syncJiraTickets(developerId),
-    () => syncConfluencePages(developerId),
-  ];
+function idleProgress(): SyncProgressPayload {
+  return {
+    syncing: false,
+    scope: "idle",
+    completedSteps: 0,
+    totalSteps: 4,
+    activeLabels: [],
+    phase: "sync",
+  };
+}
 
-  const results = await Promise.allSettled(syncFns.map((fn) => fn()));
-  for (const r of results) {
-    if (r.status === "rejected") {
-      console.error(`[Sync] Developer ${developerId} sync error:`, r.reason);
+let _progress: SyncProgressPayload = idleProgress();
+
+export function getSyncProgress(): SyncProgressPayload {
+  return { ..._progress, activeLabels: [..._progress.activeLabels] };
+}
+
+function emitProgress(patch: Partial<SyncProgressPayload>) {
+  _progress = {
+    ..._progress,
+    ...patch,
+    activeLabels: patch.activeLabels ?? _progress.activeLabels,
+  };
+  broadcastSyncProgress(_progress);
+}
+
+function resetProgress() {
+  _progress = idleProgress();
+  broadcastSyncProgress(_progress);
+}
+
+export interface SyncDeveloperOptions {
+  scope?: "full" | "single";
+  devIndex?: number;
+  devTotal?: number;
+  /** Background cache refresh — no status-bar progress. */
+  silent?: boolean;
+}
+
+const TASK_SPECS = [
+  { label: "GitHub contributions", fn: syncContributions },
+  { label: "GitHub pull requests", fn: syncPullRequests },
+  { label: "Jira tickets", fn: syncJiraTickets },
+  { label: "Confluence pages", fn: syncConfluencePages },
+] as const;
+
+export async function syncDeveloper(developerId: string, opts: SyncDeveloperOptions = {}): Promise<void> {
+  const { scope = "single", devIndex = 1, devTotal = 1, silent = false } = opts;
+
+  const db = getDb();
+  const row = db.prepare("SELECT name FROM developers WHERE id = ?").get(developerId) as { name: string } | undefined;
+  const developerName = row?.name ?? "Developer";
+
+  const TASKS = TASK_SPECS.map((s) => ({
+    label: s.label,
+    fn: () => s.fn(developerId),
+  }));
+
+  if (silent) {
+    const results = await Promise.allSettled(TASKS.map((t) => t.fn()));
+    for (const r of results) {
+      if (r.status === "rejected") {
+        console.error(`[Sync] Developer ${developerId} sync error:`, r.reason);
+      }
+    }
+    return;
+  }
+
+  _foregroundSyncDepth++;
+  let completed = 0;
+  const active = new Set(TASKS.map((t) => t.label));
+
+  const push = () => {
+    emitProgress({
+      syncing: true,
+      scope,
+      developerName,
+      developerIndex: devIndex,
+      developerTotal: devTotal,
+      completedSteps: completed,
+      totalSteps: TASKS.length,
+      activeLabels: [...active],
+      phase: "sync",
+    });
+  };
+
+  try {
+    push();
+
+    const results = await Promise.allSettled(
+      TASKS.map(async (task) => {
+        try {
+          await task.fn();
+        } finally {
+          active.delete(task.label);
+          completed++;
+          push();
+        }
+      }),
+    );
+
+    for (const r of results) {
+      if (r.status === "rejected") {
+        console.error(`[Sync] Developer ${developerId} sync error:`, r.reason);
+      }
+    }
+  } finally {
+    _foregroundSyncDepth--;
+    if (_foregroundSyncDepth === 0 && !_syncing) {
+      resetProgress();
     }
   }
 }
@@ -29,7 +130,7 @@ export async function syncAll(): Promise<void> {
 
   try {
     const db = getDb();
-    const devs = db.prepare("SELECT id FROM developers").all() as { id: string }[];
+    const devs = db.prepare("SELECT id, name FROM developers").all() as { id: string; name: string }[];
 
     if (devs.length === 0) {
       console.log("[Sync] No developers to sync");
@@ -38,26 +139,38 @@ export async function syncAll(): Promise<void> {
 
     console.log(`[Sync] Starting sync for ${devs.length} developer(s)`);
 
-    for (const dev of devs) {
-      try {
-        await syncDeveloper(dev.id);
-        console.log(`[Sync] Completed sync for developer ${dev.id}`);
-      } catch (err) {
-        console.error(`[Sync] Failed sync for developer ${dev.id}:`, err);
-      }
+    for (let i = 0; i < devs.length; i++) {
+      await syncDeveloper(devs[i].id, {
+        scope: "full",
+        devIndex: i + 1,
+        devTotal: devs.length,
+        silent: false,
+      });
     }
 
-    // Clean up stale data after every full sync
+    emitProgress({
+      syncing: true,
+      scope: "full",
+      developerName: undefined,
+      developerIndex: devs.length,
+      developerTotal: devs.length,
+      completedSteps: 0,
+      totalSteps: 1,
+      activeLabels: ["Pruning stale cache"],
+      phase: "prune",
+    });
+
     pruneStaleData();
 
     console.log("[Sync] All syncs complete");
   } finally {
     _syncing = false;
+    resetProgress();
   }
 }
 
 export function isSyncing(): boolean {
-  return _syncing;
+  return _syncing || _foregroundSyncDepth > 0;
 }
 
 // ---------- Data Cleanup ----------
@@ -95,7 +208,7 @@ function pruneStaleData(): void {
 
     // 5. Remove orphaned cache data for deleted developers
     const orphanTables = [
-      "cached_contributions", "cached_pull_requests",
+      "cached_contributions", "cached_pull_requests", "cached_review_requests",
       "cached_jira_tickets", "cached_confluence_pages", "sync_log",
     ];
     for (const table of orphanTables) {

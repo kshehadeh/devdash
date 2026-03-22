@@ -1,5 +1,13 @@
 import { getDb } from "./index";
-import type { CommitDay, PullRequest, ConfluenceDoc, JiraTicket } from "../types";
+import type {
+  CommitDay,
+  PullRequest,
+  ConfluenceDoc,
+  JiraTicket,
+  MyPRReviewItem,
+  PullReviewState,
+  ReviewRequestItem,
+} from "../types";
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -165,6 +173,93 @@ export function computeCachedVelocity(devId: string, days: number, repos?: { org
     : 0;
 
   return { velocity, velocityChange };
+}
+
+function parseCachedLatestReviewState(raw: string | null): PullReviewState {
+  if (!raw) return null;
+  if (raw === "APPROVED" || raw === "CHANGES_REQUESTED" || raw === "COMMENTED") return raw;
+  return null;
+}
+
+/** Review queue from last successful `github_pull_requests` sync (direct user requests only). */
+export function getCachedReviewRequestItems(
+  devId: string,
+  repos?: { org: string; name: string }[],
+): ReviewRequestItem[] {
+  const db = getDb();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+  const rows = db.prepare(`
+    SELECT repo, pr_number, title, author_login, updated_at
+    FROM cached_review_requests
+    WHERE developer_id = ?${repoSql}
+    ORDER BY updated_at DESC
+    LIMIT 100
+  `).all(devId, ...repoValues) as {
+    repo: string;
+    pr_number: number;
+    title: string;
+    author_login: string;
+    updated_at: string;
+  }[];
+
+  return rows.map((row) => ({
+    id: `rr-${row.repo.replace(/\//g, "-")}-${row.pr_number}`,
+    title: row.title,
+    repo: row.repo,
+    number: row.pr_number,
+    url: `https://github.com/${row.repo}/pull/${row.pr_number}`,
+    authorLogin: row.author_login,
+    updatedAt: row.updated_at,
+    timeAgo: timeAgo(row.updated_at),
+  }));
+}
+
+/** Open PRs you authored with review fields from cache. */
+export function getCachedMyOpenPRReviewItems(
+  devId: string,
+  repos?: { org: string; name: string }[],
+): MyPRReviewItem[] {
+  const db = getDb();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+  const rows = db.prepare(`
+    SELECT pr_number, repo, title, review_count, updated_at, latest_review_state, pending_reviewers_json
+    FROM cached_pull_requests
+    WHERE developer_id = ? AND status = 'open'${repoSql}
+    ORDER BY updated_at DESC
+    LIMIT 20
+  `).all(devId, ...repoValues) as {
+    pr_number: number;
+    repo: string;
+    title: string;
+    review_count: number;
+    updated_at: string;
+    latest_review_state: string | null;
+    pending_reviewers_json: string | null;
+  }[];
+
+  return rows.map((row) => {
+    let pending: string[] = [];
+    try {
+      const parsed = row.pending_reviewers_json ? JSON.parse(row.pending_reviewers_json) : [];
+      pending = Array.isArray(parsed) ? parsed.filter((p: unknown) => typeof p === "string") : [];
+    } catch {
+      pending = [];
+    }
+
+    return {
+      id: `my-${row.repo.replace(/\//g, "-")}-${row.pr_number}`,
+      title: row.title,
+      repo: row.repo,
+      number: row.pr_number,
+      url: `https://github.com/${row.repo}/pull/${row.pr_number}`,
+      status: "open" as const,
+      updatedAt: row.updated_at,
+      timeAgo: timeAgo(row.updated_at),
+      reviewCount: row.review_count,
+      latestReviewState: parseCachedLatestReviewState(row.latest_review_state),
+      pendingReviewerLogins: pending,
+    };
+  });
 }
 
 // ---------- Jira Tickets ----------

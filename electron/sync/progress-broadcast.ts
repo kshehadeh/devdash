@@ -1,0 +1,23 @@
+import { BrowserWindow } from "electron";
+
+export type SyncScope = "idle" | "full" | "single";
+
+export interface SyncProgressPayload {
+  syncing: boolean;
+  scope: SyncScope;
+  developerName?: string;
+  developerIndex?: number;
+  developerTotal?: number;
+  completedSteps: number;
+  totalSteps: number;
+  activeLabels: string[];
+  phase: "sync" | "prune";
+}
+
+export function broadcastSyncProgress(payload: SyncProgressPayload): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("sync:progress", payload);
+    }
+  }
+}
