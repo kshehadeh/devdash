@@ -33,7 +33,6 @@ export default function ConnectionsPage() {
 
   const [showGhToken, setShowGhToken] = useState(false);
   const [ghToken, setGhToken] = useState("");
-  const [ghOrg, setGhOrg] = useState("");
   const [ghSaving, setGhSaving] = useState(false);
   const [ghMsg, setGhMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -63,7 +62,6 @@ export default function ConnectionsPage() {
 
       const gh = conns.find((c) => c.id === "github");
       if (gh) {
-        setGhOrg(gh.org ?? "");
         setGhToken(gh.token ?? "");
       }
       const at = conns.find((c) => c.id === "atlassian");
@@ -107,7 +105,7 @@ export default function ConnectionsPage() {
       const updated = await invoke<ConnectionRecord>("connections:upsert", {
         id: "github",
         token: ghToken,
-        org: ghOrg,
+        org: "",
         connected: !!ghToken,
       });
       setGithub(updated);
@@ -127,7 +125,6 @@ export default function ConnectionsPage() {
     }
     setGithub(null);
     setGhToken("");
-    setGhOrg("");
   }
 
   async function saveAtlassian() {
@@ -293,20 +290,8 @@ export default function ConnectionsPage() {
                   <code className="text-[var(--primary)] bg-[var(--surface-container-highest)] px-1 py-0.5 rounded text-[11px]">repo</code>
                   ,{" "}
                   <code className="text-[var(--primary)] bg-[var(--surface-container-highest)] px-1 py-0.5 rounded text-[11px]">read:user</code>
-                  . Token is encrypted locally.
+                  . Token is encrypted locally. Add repositories under Sources — each entry includes its owner or organization.
                 </p>
-              </div>
-              <div>
-                <label className="block text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-2">
-                  Organization
-                </label>
-                <input
-                  type="text"
-                  value={ghOrg}
-                  onChange={(e) => setGhOrg(e.target.value)}
-                  placeholder="atelier-labs"
-                  className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)]"
-                />
               </div>
             </div>
 
