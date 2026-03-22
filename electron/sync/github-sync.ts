@@ -3,7 +3,12 @@ import { getDb } from "../db/index";
 import { getConnection } from "../db/connections";
 import { getDeveloper } from "../db/developers";
 import { getSourcesForDeveloper } from "../db/sources";
-import { fetchContributionCalendar, fetchReviewRequests, latestReviewStateFromReviews } from "../services/github";
+import {
+  fetchContributionCalendar,
+  fetchReviewRequests,
+  latestReviewStateFromReviews,
+  mergedAtFromSearchIssueItem,
+} from "../services/github";
 
 const GITHUB_API = "https://api.github.com";
 
@@ -19,7 +24,8 @@ interface SearchPRItem {
   number: number;
   title: string;
   state: string;
-  merged_at: string | null;
+  pull_request?: { merged_at: string | null } | null;
+  merged_at?: string | null;
   created_at: string;
   updated_at: string;
   repository_url: string;
@@ -185,8 +191,9 @@ export async function syncPullRequests(developerId: string): Promise<void> {
     db.transaction(() => {
       const runUpsert = (e: Awaited<ReturnType<typeof enrichPullForCache>>) => {
         const pr = e.pr;
+        const mergedAt = mergedAtFromSearchIssueItem(pr);
         let status: "open" | "merged" | "closed" = "open";
-        if (pr.merged_at) status = "merged";
+        if (mergedAt) status = "merged";
         else if (pr.state === "closed") status = "closed";
 
         upsert.run(
@@ -198,7 +205,7 @@ export async function syncPullRequests(developerId: string): Promise<void> {
           e.reviewCount,
           pr.created_at,
           pr.updated_at,
-          pr.merged_at ?? null,
+          mergedAt,
           e.latestState,
           e.pendingJson,
         );

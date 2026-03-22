@@ -37,7 +37,9 @@ interface GitHubPR {
   number: number;
   title: string;
   state: string;
-  merged_at: string | null;
+  /** Search `/search/issues` usually nests merge time here, not on the root. */
+  pull_request?: { merged_at: string | null } | null;
+  merged_at?: string | null;
   created_at: string;
   updated_at: string;
   html_url: string;
@@ -45,6 +47,14 @@ interface GitHubPR {
   review_comments: number;
   repository_url: string;
   user?: { login: string };
+}
+
+/** GitHub issue-search items expose `merged_at` on `pull_request`, not always at root. */
+export function mergedAtFromSearchIssueItem(item: {
+  merged_at?: string | null;
+  pull_request?: { merged_at: string | null } | null;
+}): string | null {
+  return item.merged_at ?? item.pull_request?.merged_at ?? null;
 }
 
 interface SearchPRResponse {
@@ -273,7 +283,7 @@ export async function fetchPullRequests(
     for (const item of data.items) {
       const repoPath = item.repository_url.replace("https://api.github.com/repos/", "");
       let status: "open" | "merged" | "closed" = "open";
-      if (item.merged_at) status = "merged";
+      if (mergedAtFromSearchIssueItem(item)) status = "merged";
       else if (item.state === "closed") status = "closed";
 
       allPRs.push({
