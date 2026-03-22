@@ -8,6 +8,7 @@ import { registerReferenceHandlers } from "./reference";
 import { registerReviewsHandlers } from "./reviews";
 import { registerSettingsIOHandlers } from "./settings-io";
 import { registerIntegrationHandlers } from "./integrations";
+import { registerCacheAdminHandlers } from "./cache-admin";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
@@ -15,6 +16,7 @@ export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerConnectionHandlers();
   registerIntegrationHandlers();
   registerSourceHandlers();
+  registerCacheAdminHandlers();
   registerStatsHandlers();
   registerSyncHandlers();
   registerDiscoverHandlers();

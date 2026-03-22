@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import SettingsLayout from "./components/layout/SettingsLayout";
 import Connections from "./pages/settings/Connections";
 import Sources from "./pages/settings/Sources";
+import Cache from "./pages/settings/Cache";
 import ReferenceLayout from "./components/layout/ReferenceLayout";
 import PullRequests from "./pages/reference/PullRequests";
 import Tickets from "./pages/reference/Tickets";
@@ -33,6 +34,7 @@ export default function App() {
               <Route index element={<Navigate to="connections" replace />} />
               <Route path="connections" element={<Connections />} />
               <Route path="sources" element={<Sources />} />
+              <Route path="cache" element={<Cache />} />
             </Route>
             <Route path="/reference" element={<ReferenceLayout />}>
               <Route index element={<Navigate to="pull-requests" replace />} />

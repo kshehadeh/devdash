@@ -1,10 +1,11 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
-import { Terminal, Database } from "lucide-react";
+import { Terminal, Database, HardDrive } from "lucide-react";
 import { clsx } from "clsx";
 
 const settingsNav = [
   { href: "/settings/connections", icon: Terminal, label: "Connected Systems", description: "API credentials" },
   { href: "/settings/sources", icon: Database, label: "Data Sources", description: "Repos, projects & spaces" },
+  { href: "/settings/cache", icon: HardDrive, label: "Local cache", description: "Size & reset sync data" },
 ];
 
 export default function SettingsLayout() {
