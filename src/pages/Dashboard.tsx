@@ -11,6 +11,7 @@ import { EffortDistribution } from "@/components/dashboard/EffortDistribution";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
 import { invoke, useIpc } from "@/lib/api";
 import { useAppStatus } from "@/context/AppStatusContext";
+import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import type {
   Developer,
   GithubStatsResponse,
@@ -29,9 +30,7 @@ const LOOKBACK_OPTIONS = [
 
 export default function DashboardPage() {
   const [developers, setDevelopers] = useState<Developer[]>([]);
-  const [selectedDevId, setSelectedDevId] = useState<string>(() => {
-    return localStorage.getItem("devdash.selectedDevId") ?? "";
-  });
+  const { selectedDevId, setSelectedDevId } = useSelectedDeveloper();
   const [lookbackDays, setLookbackDays] = useState<number>(() => {
     const stored = localStorage.getItem("devdash.lookbackDays");
     return stored ? parseInt(stored, 10) : 30;
@@ -39,10 +38,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { syncing, refreshSyncStatus } = useAppStatus();
-
-  useEffect(() => {
-    localStorage.setItem("devdash.selectedDevId", selectedDevId);
-  }, [selectedDevId]);
 
   useEffect(() => {
     localStorage.setItem("devdash.lookbackDays", lookbackDays.toString());

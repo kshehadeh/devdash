@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AppStatusProvider } from "./context/AppStatusContext";
+import { SelectedDeveloperProvider } from "./context/SelectedDeveloperContext";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
 import Dashboard from "./pages/Dashboard";
@@ -22,25 +23,27 @@ export default function App() {
 
   return (
     <AppStatusProvider>
-      <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden pb-12">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/reviews" element={<Reviews />} />
-          <Route path="/settings" element={<SettingsLayout />}>
-            <Route index element={<Navigate to="connections" replace />} />
-            <Route path="connections" element={<Connections />} />
-            <Route path="sources" element={<Sources />} />
-          </Route>
-          <Route path="/reference" element={<ReferenceLayout />}>
-            <Route index element={<Navigate to="pull-requests" replace />} />
-            <Route path="pull-requests" element={<PullRequests />} />
-            <Route path="tickets" element={<Tickets />} />
-            <Route path="documents" element={<Documents />} />
-          </Route>
-        </Routes>
-        <StatusBar />
-      </div>
+      <SelectedDeveloperProvider>
+        <Sidebar />
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden pb-12">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/reviews" element={<Reviews />} />
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="connections" replace />} />
+              <Route path="connections" element={<Connections />} />
+              <Route path="sources" element={<Sources />} />
+            </Route>
+            <Route path="/reference" element={<ReferenceLayout />}>
+              <Route index element={<Navigate to="pull-requests" replace />} />
+              <Route path="pull-requests" element={<PullRequests />} />
+              <Route path="tickets" element={<Tickets />} />
+              <Route path="documents" element={<Documents />} />
+            </Route>
+          </Routes>
+          <StatusBar />
+        </div>
+      </SelectedDeveloperProvider>
     </AppStatusProvider>
   );
 }

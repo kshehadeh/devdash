@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { invoke, useIpc } from "@/lib/api";
+import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import type { Developer, MyPRReviewItem, PullReviewState, ReviewRequestItem, ReviewsResponse } from "@/lib/types";
 
 function reviewStateBadge(state: PullReviewState) {
@@ -83,12 +84,8 @@ function MyPRRow({ item }: { item: MyPRReviewItem }) {
 
 export default function ReviewsPage() {
   const [developers, setDevelopers] = useState<Developer[]>([]);
-  const [selectedDevId, setSelectedDevId] = useState<string>(() => localStorage.getItem("devdash.selectedDevId") ?? "");
+  const { selectedDevId, setSelectedDevId } = useSelectedDeveloper();
   const [loadingDevs, setLoadingDevs] = useState(true);
-
-  useEffect(() => {
-    localStorage.setItem("devdash.selectedDevId", selectedDevId);
-  }, [selectedDevId]);
 
   const fetchDevelopers = useCallback(async () => {
     try {

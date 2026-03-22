@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Github, Kanban, BookOpen } from "lucide-react";
 import { invoke } from "@/lib/api";
+import { DEVELOPER_SOURCES_CHANGED_EVENT } from "@/lib/app-events";
 import type { Developer, DataSource, DataSourceType } from "@/lib/types";
 
 interface FormValues {
@@ -116,6 +117,7 @@ export function DeveloperForm({ initial, onSubmit, onCancel, onDelete, submitLab
       // Save source assignments after the developer is saved
       if (initial && sourcesLoaded) {
         await invoke("developers:sources:set", { id: initial.id, sourceIds: [...assignedIds] });
+        window.dispatchEvent(new Event(DEVELOPER_SOURCES_CHANGED_EVENT));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -135,101 +137,105 @@ export function DeveloperForm({ initial, onSubmit, onCancel, onDelete, submitLab
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <InputField label="Full Name" value={values.name} onChange={set("name")} placeholder="Alex Chen" required />
-      <InputField label="Role" value={values.role} onChange={set("role")} placeholder="Senior Frontend Engineer" required />
-      <InputField label="Team" value={values.team} onChange={set("team")} placeholder="Ateliers" required />
-
-      <div className="border-t border-[var(--outline-variant)]/20 pt-3 mt-1 flex flex-col gap-3">
-        <p className="text-xs font-label text-[var(--on-surface-variant)]">
-          Optional — used for API integrations
-        </p>
-        <InputField
-          label="GitHub Username"
-          value={values.githubUsername}
-          onChange={set("githubUsername")}
-          placeholder="alexchen"
-        />
-        <InputField
-          label="Atlassian Email"
-          value={values.atlassianEmail}
-          onChange={set("atlassianEmail")}
-          type="email"
-          placeholder="alex.chen@underarmour.com"
-        />
-      </div>
-
-      {/* Source Associations (edit mode only) */}
-      {initial && sourcesLoaded && allSources.length > 0 && (
-        <div className="border-t border-[var(--outline-variant)]/20 pt-3 mt-1">
-          <p className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-2">
-            Assigned Data Sources
-          </p>
-          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
-            {allSources.map((source) => {
-              const Icon = SOURCE_ICONS[source.type];
-              const checked = assignedIds.has(source.id);
-              return (
-                <label
-                  key={source.id}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleSource(source.id)}
-                    className="accent-[var(--primary)] w-3.5 h-3.5"
-                  />
-                  <Icon size={13} className="text-[var(--on-surface-variant)] shrink-0" />
-                  <span className="text-sm text-[var(--on-surface)] flex-1 truncate">{source.name}</span>
-                  <span className="text-[10px] text-[var(--on-surface-variant)] font-label">
-                    {source.type === "github_repo"
-                      ? `${source.org}/${source.identifier}`
-                      : source.identifier}
-                  </span>
-                </label>
-              );
-            })}
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col w-full">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-4">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <InputField label="Full Name" value={values.name} onChange={set("name")} placeholder="Alex Chen" required />
+            </div>
+            <InputField label="Role" value={values.role} onChange={set("role")} placeholder="Senior Frontend Engineer" required />
+            <InputField label="Team" value={values.team} onChange={set("team")} placeholder="Ateliers" required />
           </div>
-          {allSources.length === 0 && (
-            <p className="text-xs text-[var(--on-surface-variant)]">
-              No global data sources configured yet. Add them in Settings &gt; Data Sources.
+
+          <div className="border-t border-[var(--outline-variant)]/20 pt-3 mt-1 flex flex-col gap-3">
+            <p className="text-xs font-label text-[var(--on-surface-variant)]">
+              Optional — used for API integrations
+            </p>
+            <InputField
+              label="GitHub Username"
+              value={values.githubUsername}
+              onChange={set("githubUsername")}
+              placeholder="alexchen"
+            />
+            <InputField
+              label="Atlassian Email"
+              value={values.atlassianEmail}
+              onChange={set("atlassianEmail")}
+              type="email"
+              placeholder="alex.chen@underarmour.com"
+            />
+          </div>
+
+          {initial && sourcesLoaded && allSources.length > 0 && (
+            <div className="border-t border-[var(--outline-variant)]/20 pt-3 mt-1">
+              <p className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-2">
+                Assigned Data Sources
+              </p>
+              <div className="flex flex-col gap-1">
+                {allSources.map((source) => {
+                  const Icon = SOURCE_ICONS[source.type];
+                  const checked = assignedIds.has(source.id);
+                  return (
+                    <label
+                      key={source.id}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSource(source.id)}
+                        className="accent-[var(--primary)] w-3.5 h-3.5"
+                      />
+                      <Icon size={13} className="text-[var(--on-surface-variant)] shrink-0" />
+                      <span className="text-sm text-[var(--on-surface)] flex-1 truncate">{source.name}</span>
+                      <span className="text-[10px] text-[var(--on-surface-variant)] font-label">
+                        {source.type === "github_repo"
+                          ? `${source.org}/${source.identifier}`
+                          : source.identifier}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <p className="text-xs text-[var(--error)] bg-[var(--error)]/10 rounded-md px-3 py-2">
+              {error}
             </p>
           )}
         </div>
-      )}
+      </div>
 
-      {error && (
-        <p className="text-xs text-[var(--error)] bg-[var(--error)]/10 rounded-md px-3 py-2">
-          {error}
-        </p>
-      )}
-
-      <div className="flex items-center gap-2 mt-2">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="flex-1 py-2 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-container)] text-[var(--on-primary)] text-sm font-semibold rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {submitting ? "Saving..." : submitLabel}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] text-sm font-medium rounded-md hover:bg-[var(--surface-bright)] transition-colors"
-        >
-          Cancel
-        </button>
-        {onDelete && (
+      <div className="shrink-0 border-t border-[var(--outline-variant)]/20 bg-[var(--surface-container-highest)] px-6 py-4">
+        <div className="mx-auto flex max-w-3xl items-center gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="flex-1 py-2 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-container)] text-[var(--on-primary)] text-sm font-semibold rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {submitting ? "Saving..." : submitLabel}
+          </button>
           <button
             type="button"
-            onClick={handleDelete}
-            disabled={deleting}
-            className="px-4 py-2 text-[var(--error)] text-sm font-medium rounded-md hover:bg-[var(--error)]/10 transition-colors disabled:opacity-50"
+            onClick={onCancel}
+            className="px-4 py-2 bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] text-sm font-medium rounded-md hover:bg-[var(--surface-bright)] transition-colors"
           >
-            {deleting ? "Deleting..." : "Delete"}
+            Cancel
           </button>
-        )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-4 py-2 text-[var(--error)] text-sm font-medium rounded-md hover:bg-[var(--error)]/10 transition-colors disabled:opacity-50"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );

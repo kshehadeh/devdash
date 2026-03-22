@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, Check, Plus, Pencil } from "lucide-react";
 import { clsx } from "clsx";
-import { Dialog } from "@/components/ui/Dialog";
+import { FullWindowModal } from "@/components/ui/FullWindowModal";
 import { DeveloperForm } from "@/components/dashboard/DeveloperForm";
 import { invoke } from "@/lib/api";
 import type { Developer } from "@/lib/types";
@@ -118,17 +118,15 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
         </div>
       </header>
 
-      {/* Add Dialog */}
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} title="Add Developer">
+      <FullWindowModal open={addOpen} onClose={() => setAddOpen(false)} title="Add Developer">
         <DeveloperForm
           onSubmit={handleAdd}
           onCancel={() => setAddOpen(false)}
           submitLabel="Add Developer"
         />
-      </Dialog>
+      </FullWindowModal>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editDev} onClose={() => setEditDev(null)} title="Edit Developer">
+      <FullWindowModal open={!!editDev} onClose={() => setEditDev(null)} title="Edit Developer">
         {editDev && (
           <DeveloperForm
             initial={editDev}
@@ -138,7 +136,7 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
             submitLabel="Save Changes"
           />
         )}
-      </Dialog>
+      </FullWindowModal>
     </>
   );
 }

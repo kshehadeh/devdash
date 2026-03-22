@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { clsx } from "clsx";
 import { useAppStatus } from "@/context/AppStatusContext";
+import { StatusBarPersistentMessages } from "@/components/layout/StatusBarPersistentMessages";
 import type { AppNotificationType, SyncProgressPayload } from "@/lib/types";
 
 function formatSyncTime(isoDate: string): string {
@@ -122,6 +123,10 @@ export function StatusBar() {
             ))}
           </div>
         )}
+
+        <div className="flex items-center justify-end gap-2 shrink-0 ml-auto">
+          <StatusBarPersistentMessages />
+        </div>
       </div>
 
       {syncing && (
