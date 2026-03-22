@@ -9,9 +9,11 @@ import { registerReviewsHandlers } from "./reviews";
 import { registerSettingsIOHandlers } from "./settings-io";
 import { registerIntegrationHandlers } from "./integrations";
 import { registerCacheAdminHandlers } from "./cache-admin";
+import { registerAppConfigHandlers } from "./app-config";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
+  registerAppConfigHandlers();
   registerDeveloperHandlers();
   registerConnectionHandlers();
   registerIntegrationHandlers();
