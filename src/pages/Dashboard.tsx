@@ -75,10 +75,10 @@ export default function DashboardPage() {
     }
   }, [selectedDevId, refreshSyncStatus]);
 
-  const github = useIpc<GithubStatsResponse>(selectedDevId ? "stats:github" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const github = useIpc<GithubStatsResponse>(selectedDevId ? "stats:code" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
-  const tickets = useIpc<TicketsStatsResponse>(selectedDevId ? "stats:tickets" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
-  const confluence = useIpc<ConfluenceStatsResponse>(selectedDevId ? "stats:confluence" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const tickets = useIpc<TicketsStatsResponse>(selectedDevId ? "stats:work" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const confluence = useIpc<ConfluenceStatsResponse>(selectedDevId ? "stats:docs" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
 
   if (loading) {
     return (
@@ -122,7 +122,7 @@ export default function DashboardPage() {
               <div>
                 <h2 className="text-xl font-bold text-[var(--on-surface)] mb-1">Ecosystem Impact</h2>
                 <p className="text-xs font-label text-[var(--on-surface-variant)]">
-                  Performance metrics across GitHub, Jira &amp; Confluence
+                  Code, work tracking, and documentation metrics from your connected tools
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -130,7 +130,7 @@ export default function DashboardPage() {
                   onClick={handleRefresh}
                   disabled={refreshing || syncing}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--surface-container-high)] transition-colors disabled:opacity-40"
-                  title="Sync data from GitHub, Jira & Confluence"
+                  title="Sync data from connected integrations"
                 >
                   <RefreshCw size={14} className={`text-[var(--on-surface-variant)] ${refreshing || syncing ? "animate-spin" : ""}`} />
                   <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Sync</span>
@@ -209,7 +209,8 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2">
                         <Ticket size={16} className="text-[var(--primary)]" />
                         <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          {(developers.find((d) => d.id === selectedDevId)?.name.split(" ")[0] ?? "Open")} Tickets
+                          {(developers.find((d) => d.id === selectedDevId)?.name.split(" ")[0] ?? "Open")}{" "}
+                          {tickets.data?.providerId === "linear" ? "Linear issues" : "Tickets"}
                         </h3>
                         {tickets.data.jiraTickets.length > 0 && (
                           <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
@@ -236,7 +237,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2">
                         <BookOpen size={16} className="text-[var(--primary)]" />
                         <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          Confluence
+                          Documentation
                         </h3>
                       </div>
                       <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">

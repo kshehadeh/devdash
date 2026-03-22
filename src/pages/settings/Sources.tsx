@@ -3,6 +3,7 @@ import {
   Github,
   Kanban,
   BookOpen,
+  ListTree,
   Plus,
   Trash2,
   Pencil,
@@ -18,21 +19,45 @@ import { invoke } from "@/lib/api";
 
 type FormMode = { kind: "add"; type: DataSourceType } | { kind: "edit"; source: DataSource };
 
+type IntegrationSettings = {
+  code: "github";
+  work: "jira" | "linear";
+  docs: "confluence";
+};
+
 const TYPE_META: Record<DataSourceType, { icon: typeof Github; label: string; color: string }> = {
   github_repo: { icon: Github, label: "GitHub Repositories", color: "var(--primary)" },
   jira_project: { icon: Kanban, label: "Jira Projects", color: "var(--secondary)" },
   confluence_space: { icon: BookOpen, label: "Confluence Spaces", color: "var(--tertiary)" },
+  linear_team: { icon: ListTree, label: "Linear Teams", color: "var(--secondary)" },
 };
+
+function activeSourceTypes(integration: IntegrationSettings | null): DataSourceType[] {
+  if (!integration) {
+    return ["github_repo", "jira_project", "confluence_space"];
+  }
+  const t: DataSourceType[] = [];
+  if (integration.code === "github") t.push("github_repo");
+  if (integration.work === "jira") t.push("jira_project");
+  if (integration.work === "linear") t.push("linear_team");
+  if (integration.docs === "confluence") t.push("confluence_space");
+  return t;
+}
 
 export default function SourcesPage() {
   const [sources, setSources] = useState<DataSource[]>([]);
+  const [integration, setIntegration] = useState<IntegrationSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [formMode, setFormMode] = useState<FormMode | null>(null);
 
   const fetchSources = useCallback(async () => {
     try {
-      const data = await invoke<DataSource[]>("sources:list");
+      const [data, integ] = await Promise.all([
+        invoke<DataSource[]>("sources:list"),
+        invoke<IntegrationSettings>("integrations:get"),
+      ]);
       if (Array.isArray(data)) setSources(data);
+      setIntegration(integ);
     } catch (err) {
       console.error("Failed to fetch sources:", err);
     } finally {
@@ -44,11 +69,11 @@ export default function SourcesPage() {
     fetchSources();
   }, [fetchSources]);
 
-  const grouped: Record<DataSourceType, DataSource[]> = {
-    github_repo: sources.filter((s) => s.type === "github_repo"),
-    jira_project: sources.filter((s) => s.type === "jira_project"),
-    confluence_space: sources.filter((s) => s.type === "confluence_space"),
-  };
+  const types = activeSourceTypes(integration);
+  const grouped: Partial<Record<DataSourceType, DataSource[]>> = {};
+  for (const type of types) {
+    grouped[type] = sources.filter((s) => s.type === type);
+  }
 
   async function handleDelete(id: string) {
     try {
@@ -67,7 +92,8 @@ export default function SourcesPage() {
         </div>
       ) : (
         <div className="max-w-2xl flex flex-col gap-5">
-            {(Object.entries(grouped) as [DataSourceType, DataSource[]][]).map(([type, items]) => {
+            {(types.map((type) => {
+              const items = grouped[type] ?? [];
               const meta = TYPE_META[type];
               const Icon = meta.icon;
               return (
@@ -104,11 +130,18 @@ export default function SourcesPage() {
                     className="flex items-center gap-2 text-xs font-label font-semibold text-[var(--primary)] uppercase tracking-wider hover:opacity-80 transition-opacity"
                   >
                     <Plus size={14} />
-                    Add {type === "github_repo" ? "Repository" : type === "jira_project" ? "Project" : "Space"}
+                    Add{" "}
+                    {type === "github_repo"
+                      ? "Repository"
+                      : type === "jira_project"
+                        ? "Project"
+                        : type === "linear_team"
+                          ? "Team"
+                          : "Space"}
                   </button>
                 </Card>
               );
-            })}
+            }))}
         </div>
       )}
 
@@ -151,6 +184,9 @@ function SourceRow({
           )}
           {source.type === "confluence_space" && (
             <span>{source.identifier}</span>
+          )}
+          {source.type === "linear_team" && (
+            <span className="font-mono text-[11px]">{source.identifier}</span>
           )}
         </div>
       </div>
@@ -211,9 +247,28 @@ function SourceFormDialog({
   const [confluenceLoading, setConfluenceLoading] = useState(false);
   const [confluenceSearching, setConfluenceSearching] = useState(false);
 
+  const [linearTeams, setLinearTeams] = useState<ComboboxOption[]>([]);
+  const [linearTeamsLoading, setLinearTeamsLoading] = useState(false);
+
   const title = isEdit
-    ? `Edit ${sourceType === "github_repo" ? "Repository" : sourceType === "jira_project" ? "Project" : "Space"}`
-    : `Add ${sourceType === "github_repo" ? "Repository" : sourceType === "jira_project" ? "Project" : "Space"}`;
+    ? `Edit ${
+        sourceType === "github_repo"
+          ? "Repository"
+          : sourceType === "jira_project"
+            ? "Project"
+            : sourceType === "linear_team"
+              ? "Linear Team"
+              : "Space"
+      }`
+    : `Add ${
+        sourceType === "github_repo"
+          ? "Repository"
+          : sourceType === "jira_project"
+            ? "Project"
+            : sourceType === "linear_team"
+              ? "Linear Team"
+              : "Space"
+      }`;
 
   // Fetch GitHub orgs on mount
   useEffect(() => {
@@ -275,6 +330,23 @@ function SourceFormDialog({
       .finally(() => setBoardsLoading(false));
   }, [sourceType, identifier]);
 
+  useEffect(() => {
+    if (sourceType !== "linear_team") return;
+    setLinearTeamsLoading(true);
+    invoke<{ id: string; key: string; name: string }[]>("discover:linear:teams")
+      .then((data) => {
+        setLinearTeams(
+          data.map((t) => ({
+            value: t.id,
+            label: `${t.name} (${t.key})`,
+            description: t.key,
+          })),
+        );
+      })
+      .catch(() => {})
+      .finally(() => setLinearTeamsLoading(false));
+  }, [sourceType]);
+
   // Fetch initial Confluence spaces on mount (small batch)
   useEffect(() => {
     if (sourceType !== "confluence_space") return;
@@ -334,6 +406,15 @@ function SourceFormDialog({
     setIdentifier(spaceKey);
     const space = confluenceSpaces.find((s) => s.value === spaceKey);
     if (space && !name) setName(space.label);
+  }
+
+  function handleLinearTeamSelect(teamId: string) {
+    setIdentifier(teamId);
+    const team = linearTeams.find((t) => t.value === teamId);
+    if (team && !name) {
+      const base = team.label.split(" (")[0]?.trim();
+      if (base) setName(base);
+    }
   }
 
   function toggleBoard(board: { id: number; name: string }) {
@@ -454,6 +535,18 @@ function SourceFormDialog({
               </div>
             )}
           </>
+        )}
+
+        {/* ---- Linear Team ---- */}
+        {sourceType === "linear_team" && (
+          <Combobox
+            label="Team"
+            options={linearTeams}
+            value={identifier}
+            onChange={handleLinearTeamSelect}
+            placeholder="Select a Linear team..."
+            loading={linearTeamsLoading}
+          />
         )}
 
         {/* ---- Confluence Space ---- */}

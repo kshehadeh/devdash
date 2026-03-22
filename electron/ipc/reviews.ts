@@ -18,6 +18,10 @@ export function registerReviewsHandlers() {
 
     const empty: ReviewsResponse = { requestedOfYou: [], onYourPullRequests: [] };
 
+    if (ctx.integration.code !== "github") {
+      return { ...empty, error: "Pull request reviews require GitHub as the code integration." };
+    }
+
     if (!ctx.ghUsername?.trim()) {
       return { ...empty, error: "Add a GitHub username for this developer in their profile." };
     }

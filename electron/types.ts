@@ -139,12 +139,17 @@ export interface GithubStatsResponse {
   commitsYTD: number;
   pullRequests: PullRequest[];
   effortDistribution: { feature: number; bugFix: number; codeReview: number };
+  /** Present when served through the integration layer */
+  providerId?: "github";
+  _syncedAt?: string;
 }
 
 export interface VelocityStatsResponse {
   velocity: number;
   velocityChange: number;
   mergeRatio: number;
+  providerId?: "github";
+  _syncedAt?: string;
 }
 
 export interface SprintStatsResponse {
@@ -155,15 +160,19 @@ export interface TicketsStatsResponse {
   jiraTickets: JiraTicket[];
   workloadHealth: number;
   ticketVelocity: number;
+  providerId?: "jira" | "linear";
+  _syncedAt?: string;
 }
 
 export interface ConfluenceStatsResponse {
   confluenceDocs: ConfluenceDoc[];
   confluenceActivity: ConfluenceActivity[];
   docAuthorityLevel: number;
+  providerId?: "confluence";
+  _syncedAt?: string;
 }
 
-export type DataSourceType = "github_repo" | "jira_project" | "confluence_space";
+export type DataSourceType = "github_repo" | "jira_project" | "confluence_space" | "linear_team";
 
 export interface JiraBoardRef {
   id: number;
@@ -173,6 +182,8 @@ export interface JiraBoardRef {
 export interface DataSource {
   id: string;
   type: DataSourceType;
+  /** Integration vendor (e.g. github, jira, linear). */
+  providerId?: string | null;
   name: string;
   org: string;
   identifier: string;

@@ -361,3 +361,90 @@ export function getCachedConfluenceActivity(devId: string, spaceKeys?: string[],
       : undefined,
   }));
 }
+
+// ---------- Linear (mapped to JiraTicket shape for the dashboard) ----------
+
+function linearTeamIdClause(teamIds: string[] | undefined): { sql: string; values: string[] } {
+  if (teamIds === undefined) return { sql: "", values: [] };
+  if (teamIds.length === 0) return { sql: " AND 1=0", values: [] };
+  return { sql: ` AND team_id IN (${teamIds.map(() => "?").join(",")})`, values: teamIds };
+}
+
+function linearStateTypeToCategory(t: string): "todo" | "in_progress" | "done" {
+  const x = (t || "").toLowerCase();
+  if (x === "completed" || x === "canceled") return "done";
+  if (x === "started") return "in_progress";
+  return "todo";
+}
+
+function linearIssueUrl(workspaceSlug: string | undefined, identifier: string): string {
+  const w = workspaceSlug?.trim();
+  if (w) return `https://linear.app/${w}/issue/${identifier}`;
+  return `https://linear.app/issue/${identifier}`;
+}
+
+export function getCachedLinearTicketsAsJiraShape(
+  devId: string,
+  days: number,
+  teamIds: string[] | undefined,
+  workspaceSlug?: string,
+): JiraTicket[] {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: teamSql, values: teamValues } = linearTeamIdClause(teamIds);
+
+  const rows = db.prepare(`
+    SELECT identifier, title, state_name, state_type, team_key, updated_at
+    FROM cached_linear_issues
+    WHERE developer_id = ? AND updated_at >= ?
+      AND LOWER(state_type) NOT IN ('completed', 'canceled')${teamSql}
+    ORDER BY updated_at DESC
+    LIMIT 50
+  `).all(devId, sinceStr, ...teamValues) as {
+    identifier: string;
+    title: string;
+    state_name: string;
+    state_type: string;
+    team_key: string | null;
+    updated_at: string;
+  }[];
+
+  return rows.map((row) => {
+    const cat = linearStateTypeToCategory(row.state_type);
+    return {
+      id: row.identifier,
+      key: row.identifier,
+      title: row.title,
+      status: row.state_name || "Open",
+      statusCategory: cat,
+      priority: "medium" as const,
+      type: "Issue",
+      updatedAt: row.updated_at,
+      updatedAgo: timeAgo(row.updated_at),
+      url: linearIssueUrl(workspaceSlug, row.identifier),
+    };
+  });
+}
+
+export function getCachedLinearCompletedCount(
+  devId: string,
+  days: number,
+  teamIds: string[] | undefined,
+): number {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: teamSql, values: teamValues } = linearTeamIdClause(teamIds);
+
+  const row = db.prepare(
+    `SELECT COUNT(*) as c FROM cached_linear_issues
+     WHERE developer_id = ? AND updated_at >= ?
+       AND LOWER(state_type) IN ('completed','canceled')${teamSql}`,
+  ).get(devId, sinceStr, ...teamValues) as { c: number };
+
+  return row.c;
+}
+

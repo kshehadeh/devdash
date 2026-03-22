@@ -1,5 +1,7 @@
 import { ipcMain } from "electron";
 import { getDb } from "../db/index";
+import { getIntegrationSettings } from "../db/integration-settings";
+import { getConnection } from "../db/connections";
 
 export function registerReferenceHandlers() {
   ipcMain.handle("reference:pull-requests", () => {
@@ -22,6 +24,38 @@ export function registerReferenceHandlers() {
 
   ipcMain.handle("reference:tickets", () => {
     const db = getDb();
+    const work = getIntegrationSettings().work;
+
+    if (work === "linear") {
+      const conn = getConnection("linear");
+      const workspace = conn?.org?.trim() ?? "";
+      const rows = db.prepare(`
+        SELECT cli.developer_id, d.name AS developer_name, cli.identifier, cli.title,
+               cli.state_name, cli.state_type, cli.team_key, cli.updated_at
+        FROM cached_linear_issues cli
+        INNER JOIN developers d ON d.id = cli.developer_id
+        ORDER BY cli.updated_at DESC
+      `).all() as any[];
+
+      const cat = (st: string) => {
+        const x = (st || "").toLowerCase();
+        if (x === "completed" || x === "canceled") return "done";
+        if (x === "started") return "in_progress";
+        return "todo";
+      };
+      return rows.map((r) => ({
+        developerName: r.developer_name,
+        issueKey: r.identifier,
+        summary: r.title,
+        status: r.state_name,
+        statusCategory: cat(r.state_type),
+        projectKey: r.team_key ?? "—",
+        updatedAt: r.updated_at,
+        url: workspace ? `https://linear.app/${workspace}/issue/${r.identifier}` : `https://linear.app/issue/${r.identifier}`,
+        source: "linear" as const,
+      }));
+    }
+
     const conn = db.prepare("SELECT org FROM connections WHERE id = 'atlassian'").get() as { org: string } | undefined;
     const site = conn?.org ?? "";
 
@@ -38,6 +72,7 @@ export function registerReferenceHandlers() {
       status: r.status, statusCategory: r.status_category,
       projectKey: r.project_key ?? "—", updatedAt: r.updated_at,
       url: site ? `https://${site}.atlassian.net/browse/${r.issue_key}` : "",
+      source: "jira" as const,
     }));
   });
 

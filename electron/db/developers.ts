@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { getDb } from "./index";
 import type { Developer } from "../types";
+import { ensureDeveloperIntegrationRows, mergeLegacyIdentityFromDeveloper } from "./developer-identity";
 
 interface DbRow {
   id: string;
@@ -59,6 +60,11 @@ export function createDeveloper(input: {
     `INSERT INTO developers (id, name, avatar, role, team, github_username, atlassian_email)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(id, input.name, avatar, input.role, input.team, input.githubUsername ?? null, input.atlassianEmail ?? null);
+  ensureDeveloperIntegrationRows(id);
+  mergeLegacyIdentityFromDeveloper(id, {
+    githubUsername: input.githubUsername,
+    atlassianEmail: input.atlassianEmail,
+  });
   return getDeveloper(id)!;
 }
 
@@ -93,6 +99,10 @@ export function updateDeveloper(
     input.atlassianEmail !== undefined ? (input.atlassianEmail || null) : (existing.atlassianEmail ?? null),
     id
   );
+  mergeLegacyIdentityFromDeveloper(id, {
+    githubUsername: input.githubUsername,
+    atlassianEmail: input.atlassianEmail,
+  });
   return getDeveloper(id);
 }
 

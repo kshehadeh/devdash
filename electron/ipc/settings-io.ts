@@ -6,6 +6,8 @@ import { listSources, createSource, getSourcesForDeveloper, setSourcesForDevelop
 import { listConnections, saveConnection } from "../db/connections";
 import type { ConnectionId } from "../db/connections";
 import type { DataSource } from "../types";
+import { getIntegrationSettings, setIntegrationProvider } from "../db/integration-settings";
+import type { IntegrationCategory } from "../integrations/types";
 
 interface ExportedDeveloper {
   id: string;
@@ -38,6 +40,12 @@ interface ExportedDeveloperSources {
   sourceIds: string[];
 }
 
+interface ExportedIntegration {
+  code: string;
+  work: string;
+  docs: string;
+}
+
 interface SettingsExport {
   version: number;
   exportedAt: string;
@@ -45,6 +53,7 @@ interface SettingsExport {
   dataSources: ExportedDataSource[];
   developers: ExportedDeveloper[];
   developerSources: ExportedDeveloperSources[];
+  integration?: ExportedIntegration;
 }
 
 function buildExport(): SettingsExport {
@@ -57,9 +66,16 @@ function buildExport(): SettingsExport {
     sourceIds: getSourcesForDeveloper(dev.id).map((s) => s.id),
   }));
 
+  const integration = getIntegrationSettings();
+
   return {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
+    integration: {
+      code: integration.code,
+      work: integration.work,
+      docs: integration.docs,
+    },
     connections: connections.map((c) => ({
       id: c.id,
       email: c.email,
@@ -167,12 +183,26 @@ function performImport(data: SettingsExport, overwriteDuplicates: boolean): void
 
   // Update connection metadata (email/org only — no secrets)
   for (const conn of data.connections) {
-    if (conn.id !== "github" && conn.id !== "atlassian") continue;
+    if (conn.id !== "github" && conn.id !== "atlassian" && conn.id !== "linear") continue;
     saveConnection(conn.id as ConnectionId, {
       email: conn.email,
       org: conn.org,
       // never import `connected` state or tokens
     });
+  }
+
+  if (data.integration && data.version >= 2) {
+    const integ = data.integration;
+    const apply = (cat: IntegrationCategory, pid: string) => {
+      try {
+        setIntegrationProvider(cat, pid);
+      } catch {
+        /* ignore invalid provider ids from older exports */
+      }
+    };
+    if (integ.code) apply("code", integ.code);
+    if (integ.work) apply("work", integ.work);
+    if (integ.docs) apply("docs", integ.docs);
   }
 }
 
@@ -205,7 +235,11 @@ export async function runImportSettings(win: BrowserWindow | null): Promise<void
     return;
   }
 
-  if (data.version !== 1 || !Array.isArray(data.developers) || !Array.isArray(data.dataSources)) {
+  if (
+    (data.version !== 1 && data.version !== 2) ||
+    !Array.isArray(data.developers) ||
+    !Array.isArray(data.dataSources)
+  ) {
     await dialog.showErrorBox("Import Failed", "The file does not appear to be a valid DevDash settings export.");
     return;
   }

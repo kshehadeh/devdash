@@ -7,11 +7,13 @@ import { registerDiscoverHandlers } from "./discover";
 import { registerReferenceHandlers } from "./reference";
 import { registerReviewsHandlers } from "./reviews";
 import { registerSettingsIOHandlers } from "./settings-io";
+import { registerIntegrationHandlers } from "./integrations";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerDeveloperHandlers();
   registerConnectionHandlers();
+  registerIntegrationHandlers();
   registerSourceHandlers();
   registerStatsHandlers();
   registerSyncHandlers();

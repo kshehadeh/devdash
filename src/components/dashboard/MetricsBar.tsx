@@ -116,7 +116,11 @@ export function MetricsBar({
             value={`${tickets.workloadHealth}/10`}
             sub={tickets.workloadHealth >= 8 ? "HEALTHY" : tickets.workloadHealth >= 5 ? "MODERATE" : tickets.workloadHealth > 0 ? "OVERLOADED" : "NO DATA"}
             subColor={tickets.workloadHealth >= 8 ? "text-emerald-400" : tickets.workloadHealth >= 5 ? "text-amber-400" : tickets.workloadHealth > 0 ? "text-[var(--error)]" : "text-[var(--on-surface-variant)]"}
-            description="A score from 1–10 reflecting ticket load balance. It factors in the number of open tickets, blockers, and how evenly work is distributed. Lower scores indicate overload."
+            description={
+              tickets.providerId === "linear"
+                ? "A score from 1–10 reflecting open Linear issue load (WIP and volume). Lower scores suggest overload."
+                : "A score from 1–10 reflecting ticket load balance. It factors in the number of open tickets, blockers, and how evenly work is distributed. Lower scores indicate overload."
+            }
           />
           <MetricCard
             icon={Ticket}
@@ -125,7 +129,11 @@ export function MetricsBar({
             sub="completed"
             subColor={tickets.ticketVelocity >= 10 ? "text-emerald-400" : tickets.ticketVelocity >= 5 ? "text-[var(--primary)]" : "text-[var(--on-surface-variant)]"}
             period={periodLabel}
-            description="Total number of tickets moved to a completed or done state within the selected period."
+            description={
+              tickets.providerId === "linear"
+                ? "Linear issues completed or canceled in the selected period."
+                : "Total number of tickets moved to a completed or done state within the selected period."
+            }
           />
         </>
       )}

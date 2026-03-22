@@ -1,6 +1,5 @@
 import { getDb } from "../db/index";
-import { syncContributions, syncPullRequests } from "./github-sync";
-import { syncJiraTickets, syncConfluencePages } from "./atlassian-sync";
+import { getRegisteredSyncTasks } from "../integrations/sync-registry";
 import { broadcastSyncProgress, type SyncProgressPayload } from "./progress-broadcast";
 
 let _syncing = false;
@@ -8,11 +7,12 @@ let _syncing = false;
 let _foregroundSyncDepth = 0;
 
 function idleProgress(): SyncProgressPayload {
+  const n = Math.max(1, getRegisteredSyncTasks().length);
   return {
     syncing: false,
     scope: "idle",
     completedSteps: 0,
-    totalSteps: 4,
+    totalSteps: n,
     activeLabels: [],
     phase: "sync",
   };
@@ -46,13 +46,6 @@ export interface SyncDeveloperOptions {
   silent?: boolean;
 }
 
-const TASK_SPECS = [
-  { label: "GitHub contributions", fn: syncContributions },
-  { label: "GitHub pull requests", fn: syncPullRequests },
-  { label: "Jira tickets", fn: syncJiraTickets },
-  { label: "Confluence pages", fn: syncConfluencePages },
-] as const;
-
 export async function syncDeveloper(developerId: string, opts: SyncDeveloperOptions = {}): Promise<void> {
   const { scope = "single", devIndex = 1, devTotal = 1, silent = false } = opts;
 
@@ -60,9 +53,10 @@ export async function syncDeveloper(developerId: string, opts: SyncDeveloperOpti
   const row = db.prepare("SELECT name FROM developers WHERE id = ?").get(developerId) as { name: string } | undefined;
   const developerName = row?.name ?? "Developer";
 
-  const TASKS = TASK_SPECS.map((s) => ({
+  const specs = getRegisteredSyncTasks();
+  const TASKS = specs.map((s) => ({
     label: s.label,
-    fn: () => s.fn(developerId),
+    fn: () => s.run(developerId),
   }));
 
   if (silent) {
@@ -206,10 +200,14 @@ function pruneStaleData(): void {
     const r4 = db.prepare("DELETE FROM cached_confluence_pages WHERE last_modified < ?").run(cutoff);
     totalDeleted += r4.changes;
 
-    // 5. Remove orphaned cache data for deleted developers
+    // 5. Prune linear issues not updated in over 1 year
+    const r5 = db.prepare("DELETE FROM cached_linear_issues WHERE updated_at < ?").run(cutoff);
+    totalDeleted += r5.changes;
+
+    // 6. Remove orphaned cache data for deleted developers
     const orphanTables = [
       "cached_contributions", "cached_pull_requests", "cached_review_requests",
-      "cached_jira_tickets", "cached_confluence_pages", "sync_log",
+      "cached_jira_tickets", "cached_confluence_pages", "cached_linear_issues", "sync_log",
     ];
     for (const table of orphanTables) {
       const rows = db.prepare(`SELECT DISTINCT developer_id FROM ${table}`).all() as { developer_id: string }[];

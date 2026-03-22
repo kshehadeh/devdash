@@ -189,6 +189,93 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX IF NOT EXISTS idx_cached_review_req_dev ON cached_review_requests(developer_id);
   `,
+  // v8 — per-category integration provider selection
+  `
+  CREATE TABLE IF NOT EXISTS integration_settings (
+    category TEXT NOT NULL PRIMARY KEY CHECK (category IN ('code', 'work', 'docs')),
+    provider_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT OR IGNORE INTO integration_settings (category, provider_id) VALUES
+    ('code', 'github'),
+    ('work', 'jira'),
+    ('docs', 'confluence');
+  `,
+  // v9 — developer identity per category (JSON payload); backfill from legacy columns
+  `
+  CREATE TABLE IF NOT EXISTS developer_integration_identity (
+    developer_id TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('code', 'work', 'docs')),
+    provider_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (developer_id, category),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+  INSERT OR IGNORE INTO developer_integration_identity (developer_id, category, provider_id, payload_json)
+    SELECT id, 'code', 'github',
+      CASE WHEN github_username IS NOT NULL AND github_username != ''
+        THEN json_object('githubUsername', github_username) ELSE '{}' END
+    FROM developers;
+  INSERT OR IGNORE INTO developer_integration_identity (developer_id, category, provider_id, payload_json)
+    SELECT id, 'work', 'jira',
+      CASE WHEN atlassian_email IS NOT NULL AND atlassian_email != ''
+        THEN json_object('workEmail', atlassian_email) ELSE '{}' END
+    FROM developers;
+  INSERT OR IGNORE INTO developer_integration_identity (developer_id, category, provider_id, payload_json)
+    SELECT id, 'docs', 'confluence',
+      CASE WHEN atlassian_email IS NOT NULL AND atlassian_email != ''
+        THEN json_object('atlassianEmail', atlassian_email) ELSE '{}' END
+    FROM developers;
+  `,
+  // v10 — data_sources: add provider_id, drop restrictive type CHECK (table rebuild)
+  `
+  PRAGMA foreign_keys = OFF;
+  CREATE TABLE data_sources_new (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    provider_id TEXT,
+    name TEXT NOT NULL,
+    org TEXT NOT NULL DEFAULT '',
+    identifier TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT INTO data_sources_new (id, type, provider_id, name, org, identifier, metadata, created_at, updated_at)
+    SELECT id, type,
+      CASE type
+        WHEN 'github_repo' THEN 'github'
+        WHEN 'jira_project' THEN 'jira'
+        WHEN 'confluence_space' THEN 'confluence'
+        ELSE NULL
+      END,
+      name, org, identifier, metadata, created_at, updated_at
+    FROM data_sources;
+  DROP TABLE data_sources;
+  ALTER TABLE data_sources_new RENAME TO data_sources;
+  PRAGMA foreign_keys = ON;
+  `,
+  // v11 — Linear issue cache
+  `
+  CREATE TABLE IF NOT EXISTS cached_linear_issues (
+    developer_id TEXT NOT NULL,
+    issue_id TEXT NOT NULL,
+    identifier TEXT NOT NULL,
+    title TEXT NOT NULL,
+    state_name TEXT NOT NULL DEFAULT '',
+    state_type TEXT NOT NULL DEFAULT 'unstarted',
+    team_key TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (developer_id, issue_id),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_cached_linear_dev_updated ON cached_linear_issues(developer_id, updated_at);
+  `,
+  // v12 — Linear team id for source filtering
+  `
+  ALTER TABLE cached_linear_issues ADD COLUMN team_id TEXT;
+  `,
 ];
 
 

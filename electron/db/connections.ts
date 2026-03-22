@@ -1,7 +1,7 @@
 import { getDb } from "./index";
 import { encrypt, decrypt } from "./crypto";
 
-export type ConnectionId = "github" | "atlassian";
+export type ConnectionId = "github" | "atlassian" | "linear";
 
 export interface ConnectionRecord {
   id: ConnectionId;

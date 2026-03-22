@@ -3,6 +3,7 @@ import { getDb } from "../db/index";
 import { getConnection } from "../db/connections";
 import { getDeveloper } from "../db/developers";
 import { getSourcesForDeveloper } from "../db/sources";
+import { getWorkEmailForDeveloper } from "../db/developer-identity";
 
 function basicAuth(email: string, token: string): string {
   return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
@@ -60,7 +61,8 @@ async function resolveAccountId(
 function getAtlassianContext(developerId: string) {
   const dev = getDeveloper(developerId);
   const atConn = getConnection("atlassian");
-  if (!dev?.atlassianEmail || !atConn?.connected || !atConn.token || !atConn.email || !atConn.org) return null;
+  const workEmail = getWorkEmailForDeveloper(developerId);
+  if (!dev || !workEmail || !atConn?.connected || !atConn.token || !atConn.email || !atConn.org) return null;
 
   const devSources = getSourcesForDeveloper(developerId);
   const projectKeys = devSources.filter((s) => s.type === "jira_project").map((s) => s.identifier);
@@ -71,7 +73,7 @@ function getAtlassianContext(developerId: string) {
     site: atConn.org,
     email: atConn.email,
     token: atConn.token,
-    atlassianEmail: dev.atlassianEmail,
+    atlassianEmail: workEmail,
     projectKeys,
     spaceKeys,
   };

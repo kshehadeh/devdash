@@ -1,6 +1,7 @@
 // @ts-nocheck — external API calls, fetch().json() returns unknown
 import { ipcMain } from "electron";
 import { getConnection } from "../db/connections";
+import { fetchAllLinearTeams } from "../services/linear";
 
 function ghHeaders(token: string) {
   return { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
@@ -108,5 +109,11 @@ export function registerDiscoverHandlers() {
     if (!res.ok) throw new Error("Failed to fetch spaces");
     const d = await res.json();
     return (d.results ?? []).map((s: any) => ({ id: s.id, key: s.key, name: s.name, type: s.type }));
+  });
+
+  ipcMain.handle("discover:linear:teams", async () => {
+    const conn = getConnection("linear");
+    if (!conn?.connected || !conn.token) throw new Error("Linear not connected");
+    return fetchAllLinearTeams(conn.token);
   });
 }

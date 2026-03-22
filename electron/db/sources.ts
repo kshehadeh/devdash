@@ -2,9 +2,25 @@ import { randomUUID } from "crypto";
 import { getDb } from "./index";
 import type { DataSource, DataSourceType } from "../types";
 
+function defaultProviderForType(type: DataSourceType): string | null {
+  switch (type) {
+    case "github_repo":
+      return "github";
+    case "jira_project":
+      return "jira";
+    case "confluence_space":
+      return "confluence";
+    case "linear_team":
+      return "linear";
+    default:
+      return null;
+  }
+}
+
 interface DbRow {
   id: string;
   type: string;
+  provider_id: string | null;
   name: string;
   org: string;
   identifier: string;
@@ -23,6 +39,7 @@ function rowToModel(row: DbRow): DataSource {
   return {
     id: row.id,
     type: row.type as DataSourceType,
+    providerId: row.provider_id ?? undefined,
     name: row.name,
     org: row.org,
     identifier: row.identifier,
@@ -52,19 +69,21 @@ export function createSource(input: {
   org: string;
   identifier: string;
   metadata?: Record<string, unknown>;
+  providerId?: string | null;
 }): DataSource {
   const db = getDb();
   const id = randomUUID();
+  const providerId = input.providerId ?? defaultProviderForType(input.type);
   db.prepare(
-    `INSERT INTO data_sources (id, type, name, org, identifier, metadata)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(id, input.type, input.name, input.org, input.identifier, JSON.stringify(input.metadata ?? {}));
+    `INSERT INTO data_sources (id, type, provider_id, name, org, identifier, metadata)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, input.type, providerId, input.name, input.org, input.identifier, JSON.stringify(input.metadata ?? {}));
   return getSource(id)!;
 }
 
 export function updateSource(
   id: string,
-  input: { name?: string; org?: string; identifier?: string; metadata?: Record<string, unknown> },
+  input: { name?: string; org?: string; identifier?: string; metadata?: Record<string, unknown>; providerId?: string | null },
 ): DataSource | null {
   const db = getDb();
   const existing = getSource(id);
@@ -72,13 +91,14 @@ export function updateSource(
 
   db.prepare(
     `UPDATE data_sources
-     SET name = ?, org = ?, identifier = ?, metadata = ?, updated_at = datetime('now')
+     SET name = ?, org = ?, identifier = ?, metadata = ?, provider_id = COALESCE(?, provider_id), updated_at = datetime('now')
      WHERE id = ?`
   ).run(
     input.name ?? existing.name,
     input.org ?? existing.org,
     input.identifier ?? existing.identifier,
     input.metadata ? JSON.stringify(input.metadata) : JSON.stringify(existing.metadata),
+    input.providerId !== undefined ? input.providerId : null,
     id,
   );
   return getSource(id);
