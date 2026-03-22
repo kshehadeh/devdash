@@ -7,6 +7,8 @@ import { runExportSettings, runImportSettings } from "./ipc/settings-io";
 
 const isDev = process.env.NODE_ENV === "development";
 
+app.setName("DevDash");
+
 // Must be called before app.whenReady() — registers the custom scheme as privileged
 // so it can load ES modules, use fetch, etc.
 if (!isDev) {
@@ -88,9 +90,32 @@ function setupAutoUpdater() {
 
 function buildMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: "DevDash",
+            submenu: [
+              { role: "about" as const },
+              { type: "separator" as const },
+              { role: "services" as const },
+              { type: "separator" as const },
+              { role: "hide" as const },
+              { role: "hideOthers" as const },
+              { role: "unhide" as const },
+              { type: "separator" as const },
+              { role: "quit" as const },
+            ],
+          },
+        ]
+      : []),
     {
       label: "File",
       submenu: [
+        {
+          label: "Settings...",
+          click: () => mainWindow?.webContents.send("menu:navigate", "/settings"),
+        },
+        { type: "separator" },
         {
           label: "Export Settings...",
           click: () => runExportSettings(mainWindow),
@@ -113,6 +138,19 @@ function buildMenu() {
 
 app.whenReady().then(() => {
   if (!isDev) setupProtocol();
+
+  // Set dock icon explicitly for dev mode (production uses build/icon.icns via electron-builder)
+  if (process.platform === "darwin") {
+    const iconPath = path.join(__dirname, "..", "..", "build", "icon.png");
+    if (fs.existsSync(iconPath)) {
+      try {
+        app.dock?.setIcon(iconPath);
+      } catch {
+        // non-fatal: dock icon update failed
+      }
+    }
+  }
+
   registerAllHandlers(() => mainWindow);
   buildMenu();
   createWindow();

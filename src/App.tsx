@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { Sidebar } from "./components/layout/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import SettingsLayout from "./components/layout/SettingsLayout";
@@ -10,6 +11,12 @@ import Tickets from "./pages/reference/Tickets";
 import Documents from "./pages/reference/Documents";
 
 export default function App() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    window.electron.onMenuNavigate((path) => navigate(path));
+  }, [navigate]);
+
   return (
     <>
       <Sidebar />
