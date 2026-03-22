@@ -2,7 +2,6 @@
 
 A desktop developer dashboard that aggregates your code, work tracking, and documentation activity into a single view. Connect your tools — GitHub, Jira, Linear, Confluence — and get a real-time picture of your engineering impact.
 
-![DevDash Dashboard](docs/images/dashboard.png)
 
 ## Features
 
