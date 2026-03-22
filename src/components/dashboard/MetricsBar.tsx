@@ -31,13 +31,15 @@ function MetricCard({ icon: Icon, label, value, sub, subColor, period, descripti
       <div className="w-8 h-8 rounded-md bg-[var(--surface-container-highest)] flex items-center justify-center shrink-0">
         <Icon size={16} className="text-[var(--primary)]" />
       </div>
-      <div className={`min-w-0 flex-1 ${hasCorner ? "pr-10" : ""}`}>
-        <div className="flex items-center mb-1 min-w-0 overflow-hidden">
-          <span className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider truncate">
+      <div className="min-w-0 flex-1">
+        <div className="flex w-full min-w-0 items-center mb-1">
+          <span className="min-w-0 flex-1 truncate text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
             {label}
           </span>
         </div>
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
+        <div
+          className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0 ${hasCorner ? "pr-10" : ""}`}
+        >
           <span className="text-2xl font-bold text-[var(--on-surface)] leading-none shrink-0">{value}</span>
           <span className={`text-xs font-label font-semibold min-w-0 break-words ${subColor}`}>{sub}</span>
         </div>
@@ -89,7 +91,7 @@ export function MetricsBar({
             sub={velocity.velocityChange >= 0 ? `↑ ${velocity.velocityChange}%` : `↓ ${Math.abs(velocity.velocityChange)}%`}
             subColor={velocity.velocityChange >= 0 ? "text-emerald-400" : "text-[var(--error)]"}
             period={periodLabel}
-            description="Number of pull requests merged in the selected period. The percentage shows change vs. the prior period of equal length."
+            description="Pull requests you authored whose created date falls in the selected period (assigned repos only). The percentage is change vs. the prior period of equal length."
           />
           <MetricCard
             icon={GitMerge}
@@ -98,7 +100,7 @@ export function MetricsBar({
             sub={velocity.mergeRatio >= 90 ? "OPTIMAL" : velocity.mergeRatio >= 70 ? "GOOD" : velocity.mergeRatio >= 50 ? "FAIR" : "LOW"}
             subColor={velocity.mergeRatio >= 90 ? "text-emerald-400" : velocity.mergeRatio >= 70 ? "text-[var(--primary)]" : "text-[var(--error)]"}
             period={periodLabel}
-            description="Percentage of opened pull requests that were successfully merged. A higher ratio indicates fewer abandoned or rejected PRs."
+            description="Among PRs you opened (created) in the selected period, the share that merged. Based on creation date, not merge date. Higher means fewer closed-unmerged in that cohort."
           />
         </>
       )}
@@ -114,8 +116,22 @@ export function MetricsBar({
             icon={Activity}
             label="Workload Health"
             value={`${tickets.workloadHealth}/10`}
-            sub={tickets.workloadHealth >= 8 ? "HEALTHY" : tickets.workloadHealth >= 5 ? "MODERATE" : tickets.workloadHealth > 0 ? "OVERLOADED" : "NO DATA"}
-            subColor={tickets.workloadHealth >= 8 ? "text-emerald-400" : tickets.workloadHealth >= 5 ? "text-amber-400" : tickets.workloadHealth > 0 ? "text-[var(--error)]" : "text-[var(--on-surface-variant)]"}
+            sub={
+              tickets.workloadHealth >= 8
+                ? "HEALTHY"
+                : tickets.workloadHealth >= 5
+                  ? "MODERATE"
+                  : tickets.workloadHealth > 0
+                    ? "OVERLOADED"
+                    : "CRITICAL"
+            }
+            subColor={
+              tickets.workloadHealth >= 8
+                ? "text-emerald-400"
+                : tickets.workloadHealth >= 5
+                  ? "text-amber-400"
+                  : "text-[var(--error)]"
+            }
             description={
               tickets.providerId === "linear"
                 ? "A score from 1–10 reflecting open Linear issue load (WIP and volume). Lower scores suggest overload."
@@ -147,7 +163,7 @@ export function MetricsBar({
           value={`Lvl ${confluence.docAuthorityLevel}`}
           sub={confluence.docAuthorityLevel >= 4 ? "EXPERT" : confluence.docAuthorityLevel >= 2 ? "ACTIVE" : "CONTRIBUTOR"}
           subColor={confluence.docAuthorityLevel >= 4 ? "text-emerald-400" : "text-[var(--primary)]"}
-          description="Measures documentation contribution level based on pages created, updated, and commented on in Confluence. Level 1 = Contributor, Level 3 = Active, Level 5 = Expert."
+          description="Based on how many of your contributor pages appear in the top Confluence search results (up to 10), mapped to levels 1–5. Not a separate analytics score."
         />
       )}
     </div>
