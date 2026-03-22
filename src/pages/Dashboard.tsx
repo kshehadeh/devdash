@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Github, BookOpen, Rocket, Calendar, Ticket, RefreshCw } from "lucide-react";
+import { Github, BookOpen, Calendar, Ticket, RefreshCw } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Card } from "@/components/ui/Card";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
@@ -8,7 +8,6 @@ import { CommitHeatmap } from "@/components/dashboard/CommitHeatmap";
 import { PullRequestList } from "@/components/dashboard/PullRequestList";
 import { ConfluenceSection } from "@/components/dashboard/ConfluenceSection";
 import { EffortDistribution } from "@/components/dashboard/EffortDistribution";
-import { PerformanceProjection } from "@/components/dashboard/PerformanceProjection";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
 import { invoke, useIpc } from "@/lib/api";
 import type {
@@ -37,15 +36,6 @@ function formatSyncTime(isoDate: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function computeTrajectory(
-  velocity: VelocityStatsResponse | null,
-): "exceptional" | "strong" | "on_track" | "needs_improvement" {
-  if (!velocity) return "on_track";
-  if (velocity.velocityChange > 15 && velocity.mergeRatio > 90) return "exceptional";
-  if (velocity.velocityChange > 5 && velocity.mergeRatio > 80) return "strong";
-  if (velocity.velocityChange < -10) return "needs_improvement";
-  return "on_track";
-}
 
 export default function DashboardPage() {
   const [developers, setDevelopers] = useState<Developer[]>([]);
@@ -122,8 +112,6 @@ export default function DashboardPage() {
   const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const tickets = useIpc<TicketsStatsResponse>(selectedDevId ? "stats:tickets" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const confluence = useIpc<ConfluenceStatsResponse>(selectedDevId ? "stats:confluence" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
-
-  const trajectory = computeTrajectory(velocity.data);
 
   if (loading) {
     return (
@@ -303,15 +291,6 @@ export default function DashboardPage() {
                     <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
                   </Card>
                 ) : null}
-
-                {/* Performance Projection */}
-                <Card>
-                  <div className="flex items-center gap-2 mb-4">
-                    <Rocket size={16} className="text-[var(--tertiary)]" />
-                    <h3 className="text-sm font-semibold text-[var(--on-surface)]">System Status</h3>
-                  </div>
-                  <PerformanceProjection trajectory={trajectory} />
-                </Card>
 
                 {/* Effort Distribution */}
                 {github.loading ? (
