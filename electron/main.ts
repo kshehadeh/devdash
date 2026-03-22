@@ -1,8 +1,9 @@
-import { app, BrowserWindow, shell, protocol, net } from "electron";
+import { app, BrowserWindow, shell, protocol, net, Menu } from "electron";
 import { autoUpdater } from "electron-updater";
 import * as path from "path";
 import * as fs from "fs";
 import { registerAllHandlers } from "./ipc/index";
+import { runExportSettings, runImportSettings } from "./ipc/settings-io";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -85,9 +86,35 @@ function setupAutoUpdater() {
   });
 }
 
+function buildMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Export Settings...",
+          click: () => runExportSettings(mainWindow),
+        },
+        {
+          label: "Import Settings...",
+          click: () => runImportSettings(mainWindow),
+        },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(() => {
   if (!isDev) setupProtocol();
-  registerAllHandlers();
+  registerAllHandlers(() => mainWindow);
+  buildMenu();
   createWindow();
   setupAutoUpdater();
 

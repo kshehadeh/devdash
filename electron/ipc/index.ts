@@ -5,8 +5,10 @@ import { registerStatsHandlers } from "./stats";
 import { registerSyncHandlers } from "./sync";
 import { registerDiscoverHandlers } from "./discover";
 import { registerReferenceHandlers } from "./reference";
+import { registerSettingsIOHandlers } from "./settings-io";
+import type { BrowserWindow } from "electron";
 
-export function registerAllHandlers() {
+export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerDeveloperHandlers();
   registerConnectionHandlers();
   registerSourceHandlers();
@@ -14,4 +16,5 @@ export function registerAllHandlers() {
   registerSyncHandlers();
   registerDiscoverHandlers();
   registerReferenceHandlers();
+  registerSettingsIOHandlers(getWindow);
 }
