@@ -26,6 +26,7 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
     setAddOpen(false);
     await onDevelopersChange();
     onSelect(newDev.id);
+    return newDev;
   }
 
   async function handleEdit(values: { name: string; role: string; team: string; githubUsername: string; atlassianEmail: string }) {
@@ -33,6 +34,7 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
     await invoke("developers:update", { id: editDev.id, ...values });
     setEditDev(null);
     await onDevelopersChange();
+    return undefined;
   }
 
   async function handleDelete() {

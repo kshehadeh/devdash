@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Github, Kanban, BookOpen } from "lucide-react";
+import { Github, Kanban, BookOpen, ListTree } from "lucide-react";
 import { invoke } from "@/lib/api";
 import { DEVELOPER_SOURCES_CHANGED_EVENT } from "@/lib/app-events";
 import type { Developer, DataSource, DataSourceType } from "@/lib/types";
@@ -14,16 +14,21 @@ interface FormValues {
 
 interface DeveloperFormProps {
   initial?: Developer;
-  onSubmit: (values: FormValues) => Promise<void>;
+  onSubmit: (values: FormValues) => Promise<Developer | void>;
   onCancel: () => void;
   onDelete?: () => Promise<void>;
   submitLabel?: string;
+  /** When adding a developer, load sources and persist `developers:sources:set` after create. */
+  assignSourcesForNew?: boolean;
+  /** Called after submit and source assignment succeed. */
+  onSuccess?: () => void | Promise<void>;
 }
 
 const SOURCE_ICONS: Record<DataSourceType, typeof Github> = {
   github_repo: Github,
   jira_project: Kanban,
   confluence_space: BookOpen,
+  linear_team: ListTree,
 };
 
 function InputField({
@@ -59,7 +64,15 @@ function InputField({
   );
 }
 
-export function DeveloperForm({ initial, onSubmit, onCancel, onDelete, submitLabel = "Save" }: DeveloperFormProps) {
+export function DeveloperForm({
+  initial,
+  onSubmit,
+  onCancel,
+  onDelete,
+  submitLabel = "Save",
+  assignSourcesForNew = false,
+  onSuccess,
+}: DeveloperFormProps) {
   const [values, setValues] = useState<FormValues>({
     name: initial?.name ?? "",
     role: initial?.role ?? "",
@@ -77,23 +90,42 @@ export function DeveloperForm({ initial, onSubmit, onCancel, onDelete, submitLab
   const [sourcesLoaded, setSourcesLoaded] = useState(false);
 
   useEffect(() => {
-    if (!initial) return;
-    async function load() {
-      try {
-        const [allData, assignedData] = await Promise.all([
-          invoke<DataSource[]>("sources:list"),
-          invoke<DataSource[]>("developers:sources:get", { id: initial!.id }),
-        ]);
-        if (Array.isArray(allData)) setAllSources(allData);
-        if (Array.isArray(assignedData)) setAssignedIds(new Set(assignedData.map((s: DataSource) => s.id)));
-      } catch {
-        /* ignore */
-      } finally {
-        setSourcesLoaded(true);
+    if (initial) {
+      async function load() {
+        try {
+          const [allData, assignedData] = await Promise.all([
+            invoke<DataSource[]>("sources:list"),
+            invoke<DataSource[]>("developers:sources:get", { id: initial.id }),
+          ]);
+          if (Array.isArray(allData)) setAllSources(allData);
+          if (Array.isArray(assignedData)) setAssignedIds(new Set(assignedData.map((s: DataSource) => s.id)));
+        } catch {
+          /* ignore */
+        } finally {
+          setSourcesLoaded(true);
+        }
       }
+      load();
+      return;
     }
-    load();
-  }, [initial]);
+    if (assignSourcesForNew) {
+      async function loadNew() {
+        try {
+          const allData = await invoke<DataSource[]>("sources:list");
+          if (Array.isArray(allData)) setAllSources(allData);
+        } catch {
+          /* ignore */
+        } finally {
+          setSourcesLoaded(true);
+        }
+      }
+      loadNew();
+      return;
+    }
+    setSourcesLoaded(false);
+    setAllSources([]);
+    setAssignedIds(new Set());
+  }, [initial, assignSourcesForNew]);
 
   function set(field: keyof FormValues) {
     return (v: string) => setValues((prev) => ({ ...prev, [field]: v }));
@@ -113,12 +145,20 @@ export function DeveloperForm({ initial, onSubmit, onCancel, onDelete, submitLab
     setError(null);
     setSubmitting(true);
     try {
-      await onSubmit(values);
-      // Save source assignments after the developer is saved
-      if (initial && sourcesLoaded) {
-        await invoke("developers:sources:set", { id: initial.id, sourceIds: [...assignedIds] });
-        window.dispatchEvent(new Event(DEVELOPER_SOURCES_CHANGED_EVENT));
+      const result = await onSubmit(values);
+      if (sourcesLoaded) {
+        if (initial) {
+          await invoke("developers:sources:set", { id: initial.id, sourceIds: [...assignedIds] });
+          window.dispatchEvent(new Event(DEVELOPER_SOURCES_CHANGED_EVENT));
+        } else if (assignSourcesForNew && result && typeof result === "object" && "id" in result) {
+          await invoke("developers:sources:set", {
+            id: (result as Developer).id,
+            sourceIds: [...assignedIds],
+          });
+          window.dispatchEvent(new Event(DEVELOPER_SOURCES_CHANGED_EVENT));
+        }
       }
+      await onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -167,7 +207,7 @@ export function DeveloperForm({ initial, onSubmit, onCancel, onDelete, submitLab
             />
           </div>
 
-          {initial && sourcesLoaded && allSources.length > 0 && (
+          {sourcesLoaded && allSources.length > 0 && (initial || assignSourcesForNew) && (
             <div className="border-t border-[var(--outline-variant)]/20 pt-3 mt-1">
               <p className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-2">
                 Assigned Data Sources
