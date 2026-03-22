@@ -52,9 +52,13 @@ export function registerStatsHandlers() {
     let pullRequests: PullRequest[] = [];
 
     if (ctx.ghConn?.connected && ctx.ghConn.token && ctx.ghUsername) {
+      const prPromise =
+        ctx.repoFilter.length > 0
+          ? fetchPullRequests(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days)
+          : Promise.resolve([]);
       const results = await Promise.allSettled([
         fetchContributionCalendar(ctx.ghConn.token, ctx.ghUsername),
-        fetchPullRequests(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days),
+        prPromise,
       ]);
       if (results[0].status === "fulfilled") { commitHistory = results[0].value.commits; commitsYTD = results[0].value.totalContributions; }
       if (results[1].status === "fulfilled") { pullRequests = results[1].value; }
@@ -78,7 +82,7 @@ export function registerStatsHandlers() {
     syncDeveloper(id, { silent: true }).catch((err) => console.error("[stats:velocity] Background sync error:", err));
     let velocity = 0, velocityChange = 0, mergeRatio = 0;
 
-    if (ctx.ghConn?.connected && ctx.ghConn.token && ctx.ghUsername) {
+    if (ctx.ghConn?.connected && ctx.ghConn.token && ctx.ghUsername && ctx.repoFilter.length > 0) {
       const results = await Promise.allSettled([
         fetchMergeRatio(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days),
         fetchVelocity(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days),
@@ -109,7 +113,14 @@ export function registerStatsHandlers() {
     let jiraTickets: JiraTicket[] = [];
     let ticketVelocity = 0;
 
-    if (ctx.atConn?.connected && ctx.atConn.token && ctx.atConn.email && ctx.atConn.org && ctx.atEmail) {
+    if (
+      ctx.atConn?.connected &&
+      ctx.atConn.token &&
+      ctx.atConn.email &&
+      ctx.atConn.org &&
+      ctx.atEmail &&
+      ctx.projectFilter.length > 0
+    ) {
       const [t, v] = await Promise.allSettled([
         fetchJiraTickets(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.projectFilter, days),
         fetchCompletedTicketCount(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.projectFilter, days),
@@ -138,7 +149,14 @@ export function registerStatsHandlers() {
     let confluenceDocs: ConfluenceDoc[] = [];
     let confluenceActivity: ConfluenceActivity[] = [];
 
-    if (ctx.atConn?.connected && ctx.atConn.token && ctx.atConn.email && ctx.atConn.org && ctx.atEmail) {
+    if (
+      ctx.atConn?.connected &&
+      ctx.atConn.token &&
+      ctx.atConn.email &&
+      ctx.atConn.org &&
+      ctx.atEmail &&
+      ctx.spaceFilter.length > 0
+    ) {
       const results = await Promise.allSettled([
         fetchConfluenceDocs(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.spaceFilter),
         fetchConfluenceActivity(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.atEmail, ctx.spaceFilter),

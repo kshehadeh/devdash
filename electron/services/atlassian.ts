@@ -60,6 +60,14 @@ function mapStatus(categoryKey: string): SprintIssue["status"] {
   return "todo";
 }
 
+function jqlProjectKeysInList(keys: string[]): string {
+  return keys
+    .map((k) => k.trim())
+    .filter(Boolean)
+    .map((k) => `"${k.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+    .join(", ");
+}
+
 export async function fetchActiveSprint(
   site: string,
   email: string,
@@ -74,6 +82,9 @@ export async function fetchActiveSprint(
   if (boardFilter && boardFilter.length > 0) {
     // Use the specific boards assigned to this developer
     boards = boardFilter;
+  } else if (boardFilter && boardFilter.length === 0) {
+    // Explicit empty list from developer data sources — do not scan every accessible board
+    return null;
   } else {
     // Fallback: find boards the user has access to
     const boardsRes = await fetch(`${baseUrl}/rest/agile/1.0/board?maxResults=50`, {
@@ -204,6 +215,7 @@ export async function fetchJiraTickets(
   projectKeys?: string[],
   days = 30,
 ): Promise<JiraTicket[]> {
+  if (projectKeys !== undefined && projectKeys.length === 0) return [];
 
   const baseUrl = `https://${site}.atlassian.net`;
   const hdrs = headers(email, token);
@@ -212,9 +224,8 @@ export async function fetchJiraTickets(
   sinceDate.setDate(sinceDate.getDate() - days);
   const since = sinceDate.toISOString().split("T")[0];
 
-  const projectFilter = projectKeys && projectKeys.length > 0
-    ? ` AND project IN (${projectKeys.join(",")})`
-    : "";
+  const projectFilter =
+    projectKeys && projectKeys.length > 0 ? ` AND project IN (${jqlProjectKeysInList(projectKeys)})` : "";
 
   // Resolve account ID — Jira Cloud JQL requires accountId for assignee
   const accountId = await resolveAccountId(site, email, token, atlassianEmail);
@@ -280,6 +291,7 @@ export async function fetchCompletedTicketCount(
   projectKeys?: string[],
   days = 30,
 ): Promise<number> {
+  if (projectKeys !== undefined && projectKeys.length === 0) return 0;
 
   const baseUrl = `https://${site}.atlassian.net`;
 
@@ -290,9 +302,8 @@ export async function fetchCompletedTicketCount(
   sinceDate.setDate(sinceDate.getDate() - days);
   const since = sinceDate.toISOString().split("T")[0];
 
-  const projectFilter = projectKeys && projectKeys.length > 0
-    ? ` AND project IN (${projectKeys.join(",")})`
-    : "";
+  const projectFilter =
+    projectKeys && projectKeys.length > 0 ? ` AND project IN (${jqlProjectKeysInList(projectKeys)})` : "";
 
   // Use "status changed" + date filter — "resolved" field may not be set on all instances
   const jql = `assignee = "${accountId}" AND statusCategory = Done AND updated >= "${since}"${projectFilter}`;
@@ -399,6 +410,7 @@ export async function fetchConfluenceDocs(
   atlassianEmail: string,
   spaceKeys?: string[],
 ): Promise<ConfluenceDoc[]> {
+  if (spaceKeys !== undefined && spaceKeys.length === 0) return [];
 
   const baseUrl = `https://${site}.atlassian.net/wiki`;
   const hdrs = headers(email, token);
@@ -462,6 +474,7 @@ export async function fetchConfluenceActivity(
   atlassianEmail: string,
   spaceKeys?: string[],
 ): Promise<ConfluenceActivity[]> {
+  if (spaceKeys !== undefined && spaceKeys.length === 0) return [];
 
   const baseUrl = `https://${site}.atlassian.net/wiki`;
 

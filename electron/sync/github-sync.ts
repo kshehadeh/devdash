@@ -106,11 +106,21 @@ export async function syncPullRequests(developerId: string): Promise<void> {
     .filter((s) => s.type === "github_repo")
     .map((s) => ({ org: s.org, name: s.identifier }));
 
-  const repoFilter = ghRepos.length > 0 ? " " + ghRepos.map((r) => `repo:${r.org}/${r.name}`).join(" ") : "";
+  const repoFilter = " " + ghRepos.map((r) => `repo:${r.org}/${r.name}`).join(" ");
 
   setSyncStatus(developerId, "github_pull_requests", "syncing");
 
   try {
+    if (ghRepos.length === 0) {
+      db.transaction(() => {
+        db.prepare("DELETE FROM cached_pull_requests WHERE developer_id = ?").run(developerId);
+        db.prepare("DELETE FROM cached_review_requests WHERE developer_id = ?").run(developerId);
+      })();
+      // Clear last_cursor so the next sync after repos are assigned does a full lookback, not "since today".
+      setSyncStatus(developerId, "github_pull_requests", "ok", null, null);
+      return;
+    }
+
     // Determine start date: incremental from last cursor, or 90 days for first sync
     const syncLog = db.prepare(
       "SELECT last_cursor FROM sync_log WHERE developer_id = ? AND data_type = 'github_pull_requests'",
@@ -128,7 +138,7 @@ export async function syncPullRequests(developerId: string): Promise<void> {
     const allPRs: SearchPRItem[] = [];
 
     // Fetch all PRs (open + closed + merged) updated since cursor
-    const q = `type:pr author:${username} updated:>=${since}${repoFilter} sort:updated-asc`;
+    const q = `type:pr author:${username} updated:>=${since}${repoFilter} sort:updated-asc`.trim();
     let page = 1;
     let hasMore = true;
 
@@ -145,12 +155,7 @@ export async function syncPullRequests(developerId: string): Promise<void> {
       page++;
     }
 
-    const reviewQueuePromise = fetchReviewRequests(
-      token,
-      username,
-      ghRepos.length > 0 ? ghRepos : undefined,
-      100,
-    );
+    const reviewQueuePromise = fetchReviewRequests(token, username, ghRepos, 100);
 
     const incrementalEnriched = await Promise.all(allPRs.map((pr) => enrichPullForCache(pr, token)));
 

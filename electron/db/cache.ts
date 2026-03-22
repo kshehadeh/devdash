@@ -83,18 +83,22 @@ export function getCachedCommitsYTD(devId: string): number {
 // ---------- Pull Requests ----------
 
 function repoClause(repos: { org: string; name: string }[] | undefined): { sql: string; values: string[] } {
-  if (!repos || repos.length === 0) return { sql: "", values: [] };
+  // undefined = no developer scoping (legacy); [] = developer has no GitHub repos assigned → no rows
+  if (repos === undefined) return { sql: "", values: [] };
+  if (repos.length === 0) return { sql: " AND 1=0", values: [] };
   const values = repos.map((r) => `${r.org}/${r.name}`);
   return { sql: ` AND repo IN (${values.map(() => "?").join(",")})`, values };
 }
 
 function projectClause(projectKeys: string[] | undefined): { sql: string; values: string[] } {
-  if (!projectKeys || projectKeys.length === 0) return { sql: "", values: [] };
+  if (projectKeys === undefined) return { sql: "", values: [] };
+  if (projectKeys.length === 0) return { sql: " AND 1=0", values: [] };
   return { sql: ` AND project_key IN (${projectKeys.map(() => "?").join(",")})`, values: projectKeys };
 }
 
 function spaceClause(spaceKeys: string[] | undefined): { sql: string; values: string[] } {
-  if (!spaceKeys || spaceKeys.length === 0) return { sql: "", values: [] };
+  if (spaceKeys === undefined) return { sql: "", values: [] };
+  if (spaceKeys.length === 0) return { sql: " AND 1=0", values: [] };
   return { sql: ` AND space_key IN (${spaceKeys.map(() => "?").join(",")})`, values: spaceKeys };
 }
 
@@ -131,6 +135,8 @@ export function getCachedPullRequests(devId: string, days: number, repos?: { org
 }
 
 export function computeCachedMergeRatio(devId: string, days: number, repos?: { org: string; name: string }[]): number {
+  if (repos && repos.length === 0) return 0;
+
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -151,6 +157,8 @@ export function computeCachedMergeRatio(devId: string, days: number, repos?: { o
 }
 
 export function computeCachedVelocity(devId: string, days: number, repos?: { org: string; name: string }[]): { velocity: number; velocityChange: number } {
+  if (repos && repos.length === 0) return { velocity: 0, velocityChange: 0 };
+
   const db = getDb();
   const now = new Date();
   const periodStart = new Date(now);

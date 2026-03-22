@@ -16,6 +16,15 @@ function atlHeaders(email: string, token: string) {
   };
 }
 
+/** Jira JQL `project IN (...)` with quoted keys (avoids parse issues for some keys / team-managed projects). */
+function jqlProjectKeysInList(keys: string[]): string {
+  return keys
+    .map((k) => k.trim())
+    .filter(Boolean)
+    .map((k) => `"${k.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+    .join(", ");
+}
+
 // Shared account ID cache (module-level)
 const accountIdCache = new Map<string, string>();
 
@@ -78,26 +87,52 @@ export async function syncJiraTickets(developerId: string): Promise<void> {
   setSyncStatus(developerId, "jira_tickets", "syncing");
 
   try {
+    if (ctx.projectKeys.length === 0) {
+      db.prepare("DELETE FROM cached_jira_tickets WHERE developer_id = ?").run(developerId);
+      // Clear last_cursor so the next sync (after projects are assigned) uses the full lookback window.
+      // Using "today" here caused incremental sync to skip all issues not updated since that date.
+      setSyncStatus(developerId, "jira_tickets", "ok", null, null);
+      return;
+    }
+
     const baseUrl = `https://${ctx.site}.atlassian.net`;
     const hdrs = atlHeaders(ctx.email, ctx.token);
 
     const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
     if (!accountId) { setSyncStatus(developerId, "jira_tickets", "error", "Could not resolve account ID"); return; }
 
+    const projectFilter = ` AND project IN (${jqlProjectKeysInList(ctx.projectKeys)})`;
     const syncLog = db.prepare(
       "SELECT last_cursor FROM sync_log WHERE developer_id = ? AND data_type = 'jira_tickets'",
     ).get(developerId) as { last_cursor: string | null } | undefined;
 
-    let since: string;
-    if (syncLog?.last_cursor) {
-      since = syncLog.last_cursor;
-    } else {
-      const d = new Date();
-      d.setDate(d.getDate() - 90);
-      since = d.toISOString().split("T")[0];
+    const ninety = new Date();
+    ninety.setDate(ninety.getDate() - 90);
+    const sinceDefault = ninety.toISOString().split("T")[0];
+
+    // If any assigned project has no rows in cache yet (new assignment, new project, or stale cursor),
+    // use the full lookback instead of incremental — otherwise we can miss older issues.
+    let missingCacheForProject = false;
+    const countByProject = db.prepare(
+      "SELECT COUNT(*) as c FROM cached_jira_tickets WHERE developer_id = ? AND UPPER(project_key) = UPPER(?)",
+    );
+    for (const pk of ctx.projectKeys) {
+      const row = countByProject.get(developerId, pk) as { c: number };
+      if (row.c === 0) {
+        missingCacheForProject = true;
+        break;
+      }
     }
 
-    const projectFilter = ctx.projectKeys.length > 0 ? ` AND project IN (${ctx.projectKeys.join(",")})` : "";
+    let since: string;
+    if (missingCacheForProject) {
+      since = sinceDefault;
+    } else if (syncLog?.last_cursor) {
+      since = syncLog.last_cursor;
+    } else {
+      since = sinceDefault;
+    }
+
     const jql = `assignee = "${accountId}" AND updated >= "${since}"${projectFilter} ORDER BY updated ASC`;
 
     const maxResults = 100;
@@ -188,13 +223,19 @@ export async function syncConfluencePages(developerId: string): Promise<void> {
   setSyncStatus(developerId, "confluence_pages", "syncing");
 
   try {
+    if (ctx.spaceKeys.length === 0) {
+      db.prepare("DELETE FROM cached_confluence_pages WHERE developer_id = ?").run(developerId);
+      setSyncStatus(developerId, "confluence_pages", "ok");
+      return;
+    }
+
     const baseUrl = `https://${ctx.site}.atlassian.net/wiki`;
     const hdrs = atlHeaders(ctx.email, ctx.token);
 
     const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
     if (!accountId) { setSyncStatus(developerId, "confluence_pages", "error", "Could not resolve account ID"); return; }
 
-    const spaceFilter = ctx.spaceKeys.length > 0 ? ` AND space IN (${ctx.spaceKeys.map((k) => `"${k}"`).join(",")})` : "";
+    const spaceFilter = ` AND space IN (${ctx.spaceKeys.map((k) => `"${k}"`).join(",")})`;
 
     // For Confluence, always do a full fetch of recent pages (no reliable incremental cursor)
     const cql = `contributor = "${accountId}" AND type = page${spaceFilter} ORDER BY lastmodified DESC`;

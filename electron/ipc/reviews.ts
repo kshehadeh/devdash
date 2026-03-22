@@ -26,13 +26,18 @@ export function registerReviewsHandlers() {
       return { ...empty, error: "Connect GitHub in Settings to load reviews." };
     }
 
-    const repos = ctx.repoFilter.length > 0 ? ctx.repoFilter : undefined;
+    if (ctx.repoFilter.length === 0) {
+      return {
+        ...empty,
+        error: "Assign at least one GitHub repository to this developer (Developer → Edit → Data sources).",
+      };
+    }
 
     if (hasFreshCache(data.developerId, "github_pull_requests")) {
       const st = getSyncStatus(data.developerId, "github_pull_requests");
       return {
-        requestedOfYou: getCachedReviewRequestItems(data.developerId, repos),
-        onYourPullRequests: getCachedMyOpenPRReviewItems(data.developerId, repos),
+        requestedOfYou: getCachedReviewRequestItems(data.developerId, ctx.repoFilter),
+        onYourPullRequests: getCachedMyOpenPRReviewItems(data.developerId, ctx.repoFilter),
         _syncedAt: st?.lastSyncedAt,
       };
     }
