@@ -280,6 +280,14 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE cached_linear_issues ADD COLUMN team_id TEXT;
   `,
+  // v13 — mark one developer as current user
+  `
+  ALTER TABLE developers ADD COLUMN is_current_user INTEGER NOT NULL DEFAULT 0;
+  UPDATE developers SET is_current_user = COALESCE(is_current_user, 0);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_developers_single_current_user
+    ON developers(is_current_user)
+    WHERE is_current_user = 1;
+  `,
 ];
 
 

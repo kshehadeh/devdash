@@ -4,6 +4,7 @@ export interface Developer {
   avatar: string;
   role: string;
   team: string;
+  isCurrentUser: boolean;
   githubUsername?: string;
   atlassianEmail?: string;
 }

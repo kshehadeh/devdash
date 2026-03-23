@@ -21,7 +21,7 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
 
   const selected = developers.find((d) => d.id === selectedId);
 
-  async function handleAdd(values: { name: string; role: string; team: string; githubUsername: string; atlassianEmail: string }) {
+  async function handleAdd(values: { name: string; role: string; team: string; isCurrentUser: boolean; githubUsername: string; atlassianEmail: string }) {
     const newDev = await invoke<Developer>("developers:create", values);
     setAddOpen(false);
     await onDevelopersChange();
@@ -29,7 +29,7 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
     return newDev;
   }
 
-  async function handleEdit(values: { name: string; role: string; team: string; githubUsername: string; atlassianEmail: string }) {
+  async function handleEdit(values: { name: string; role: string; team: string; isCurrentUser: boolean; githubUsername: string; atlassianEmail: string }) {
     if (!editDev) return;
     await invoke("developers:update", { id: editDev.id, ...values });
     setEditDev(null);
@@ -65,6 +65,11 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
             <span className="text-sm font-medium text-[var(--on-surface)]">
               {selected?.name ?? "Select developer"}
             </span>
+            {selected?.isCurrentUser && (
+              <span className="text-[10px] font-label tracking-wide px-1.5 py-0.5 rounded bg-[var(--primary)]/15 text-[var(--primary)]">
+                YOU
+              </span>
+            )}
             <ChevronDown
               size={14}
               className={clsx(
@@ -89,7 +94,14 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
                       {dev.avatar}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-[var(--on-surface)] truncate">{dev.name}</div>
+                      <div className="text-sm font-medium text-[var(--on-surface)] truncate flex items-center gap-1.5">
+                        <span className="truncate">{dev.name}</span>
+                        {dev.isCurrentUser && (
+                          <span className="text-[9px] font-label tracking-wide px-1.5 py-0.5 rounded bg-[var(--primary)]/15 text-[var(--primary)] shrink-0">
+                            YOU
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-[var(--on-surface-variant)] truncate">{dev.role}</div>
                     </div>
                     {dev.id === selectedId && (

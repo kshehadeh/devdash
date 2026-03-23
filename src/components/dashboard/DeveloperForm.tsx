@@ -8,6 +8,7 @@ interface FormValues {
   name: string;
   role: string;
   team: string;
+  isCurrentUser: boolean;
   githubUsername: string;
   atlassianEmail: string;
 }
@@ -77,6 +78,7 @@ export function DeveloperForm({
     name: initial?.name ?? "",
     role: initial?.role ?? "",
     team: initial?.team ?? "",
+    isCurrentUser: initial?.isCurrentUser ?? false,
     githubUsername: initial?.githubUsername ?? "",
     atlassianEmail: initial?.atlassianEmail ?? "",
   });
@@ -91,11 +93,12 @@ export function DeveloperForm({
 
   useEffect(() => {
     if (initial) {
+      const initialId = initial.id;
       async function load() {
         try {
           const [allData, assignedData] = await Promise.all([
             invoke<DataSource[]>("sources:list"),
-            invoke<DataSource[]>("developers:sources:get", { id: initial.id }),
+            invoke<DataSource[]>("developers:sources:get", { id: initialId }),
           ]);
           if (Array.isArray(allData)) setAllSources(allData);
           if (Array.isArray(assignedData)) setAssignedIds(new Set(assignedData.map((s: DataSource) => s.id)));
@@ -187,6 +190,20 @@ export function DeveloperForm({
             <InputField label="Role" value={values.role} onChange={set("role")} placeholder="Senior Frontend Engineer" required />
             <InputField label="Team" value={values.team} onChange={set("team")} placeholder="Ateliers" required />
           </div>
+          <label className="flex items-start gap-2.5 rounded-md px-3 py-2 bg-[var(--surface-container-low)] border border-[var(--outline-variant)]/20">
+            <input
+              type="checkbox"
+              checked={values.isCurrentUser}
+              onChange={(e) => setValues((prev) => ({ ...prev, isCurrentUser: e.target.checked }))}
+              className="mt-0.5 accent-[var(--primary)] w-3.5 h-3.5"
+            />
+            <span className="text-sm text-[var(--on-surface)]">
+              This is me
+              <span className="block text-xs text-[var(--on-surface-variant)] mt-0.5">
+                Mark this developer as YOU for personalized activity and notifications. This unsets any previous YOU.
+              </span>
+            </span>
+          </label>
 
           <div className="border-t border-[var(--outline-variant)]/20 pt-3 mt-1 flex flex-col gap-3">
             <p className="text-xs font-label text-[var(--on-surface-variant)]">
