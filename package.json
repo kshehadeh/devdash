@@ -13,7 +13,8 @@
     "electron:build:publish": "bun run build && bun run electron:compile && electron-builder --publish always",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "migrate-smoke": "bun run electron:compile && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/migrate-smoke.cjs",
-    "release": "bash scripts/version.sh"
+    "release": "bash scripts/version.sh",
+    "publish-release": "bun scripts/publish-release.ts"
   },
   "build": {
     "appId": "com.devdash.app",
@@ -34,6 +35,13 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "x64",
             "arm64"
@@ -69,6 +77,7 @@
     "@electron/rebuild": "^4.0.3",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/inquirer": "^9.0.9",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -78,6 +87,7 @@
     "electron": "^41.0.3",
     "electron-builder": "^26.8.1",
     "eslint": "^9",
+    "inquirer": "^13.3.2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^8.0.1",

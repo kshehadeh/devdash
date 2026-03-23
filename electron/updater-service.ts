@@ -10,6 +10,20 @@ let getMainWindow: () => BrowserWindow | null = () => null;
 let lastAnnouncedVersion: string | null = null;
 let downloadInProgress = false;
 
+function formatUpdateError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/latest-mac\.yml/i.test(message) && /\b404\b/.test(message)) {
+    return "The latest release is still being published. Try again in a minute.";
+  }
+
+  if (/ZIP file not provided/i.test(message)) {
+    return "This release is missing the mac auto-update ZIP artifact. Publish a release that includes the ZIP package and try again.";
+  }
+
+  return message || "Update check failed";
+}
+
 export function isAutoUpdateEnabled(): boolean {
   return getConfig("auto_update_enabled") !== "0";
 }
@@ -67,8 +81,7 @@ export async function runManualUpdateCheck(isDev: boolean): Promise<UpdateCheckR
     }
     return { status: "up-to-date" };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Update check failed";
-    return { status: "error", message };
+    return { status: "error", message: formatUpdateError(e) };
   }
 }
 
@@ -89,7 +102,6 @@ export async function downloadAndInstall(isDev: boolean): Promise<DownloadInstal
     return { ok: true };
   } catch (e) {
     downloadInProgress = false;
-    const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, message };
+    return { ok: false, message: formatUpdateError(e) };
   }
 }
