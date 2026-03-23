@@ -167,36 +167,30 @@ export default function DashboardPage() {
               confluenceLoading={confluence.loading}
             />
 
-            <div className="mt-6 grid grid-cols-3 gap-4">
-              <div className="col-span-2 flex flex-col gap-4">
-                {/* GitHub Contributions */}
+            <div className="mt-6 flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Pull Requests */}
                 {github.loading ? (
-                  <CardSkeleton lines={8} />
+                  <CardSkeleton lines={5} />
                 ) : github.data ? (
                   <Card>
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <Github size={16} className="text-[var(--primary)]" />
                         <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          GitHub Contributions
+                          Pull Requests
                         </h3>
+                        {github.data.pullRequests.length > 0 && (
+                          <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
+                            {github.data.pullRequests.length}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                        Heatmap: 1 year
+                      <span className="text-[10px] font-label text-[var(--on-surface-variant)]">
+                        Last {lookbackDays} days
                       </span>
                     </div>
-                    <CommitHeatmap commits={github.data.commitHistory} totalYTD={github.data.commitsYTD} />
-                    <div className="mt-5 border-t border-[var(--outline-variant)]/20 pt-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                          Pull Requests
-                        </span>
-                        <span className="text-[10px] font-label text-[var(--on-surface-variant)]">
-                          Last {lookbackDays} days
-                        </span>
-                      </div>
-                      <PullRequestList prs={github.data.pullRequests} />
-                    </div>
+                    <PullRequestList prs={github.data.pullRequests} />
                   </Card>
                 ) : null}
 
@@ -227,35 +221,59 @@ export default function DashboardPage() {
                 ) : null}
               </div>
 
-              <div className="flex flex-col gap-4">
-                {/* Confluence */}
-                {confluence.loading ? (
-                  <CardSkeleton lines={5} />
-                ) : confluence.data ? (
-                  <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <BookOpen size={16} className="text-[var(--primary)]" />
-                        <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          Documentation
-                        </h3>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="col-span-3">
+                  {/* GitHub Contributions Heatmap */}
+                  {github.loading ? (
+                    <CardSkeleton lines={8} />
+                  ) : github.data ? (
+                    <Card>
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Github size={16} className="text-[var(--primary)]" />
+                          <h3 className="text-sm font-semibold text-[var(--on-surface)]">
+                            GitHub Contributions
+                          </h3>
+                        </div>
+                        <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                          Heatmap: 1 year
+                        </span>
                       </div>
-                      <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                        Recent
-                      </span>
-                    </div>
-                    <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
-                  </Card>
-                ) : null}
+                      <CommitHeatmap commits={github.data.commitHistory} totalYTD={github.data.commitsYTD} />
+                    </Card>
+                  ) : null}
+                </div>
 
-                {/* Effort Distribution */}
-                {github.loading ? (
-                  <CardSkeleton lines={3} />
-                ) : github.data ? (
-                  <Card>
-                    <EffortDistribution distribution={github.data.effortDistribution} />
-                  </Card>
-                ) : null}
+                <div className="flex flex-col gap-4">
+                  {/* Confluence */}
+                  {confluence.loading ? (
+                    <CardSkeleton lines={5} />
+                  ) : confluence.data ? (
+                    <Card>
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <BookOpen size={16} className="text-[var(--primary)]" />
+                          <h3 className="text-sm font-semibold text-[var(--on-surface)]">
+                            Documentation
+                          </h3>
+                        </div>
+                        <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                          Recent
+                        </span>
+                      </div>
+                      <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
+                    </Card>
+                  ) : null}
+
+                  {/* Effort Distribution */}
+                  {github.loading ? (
+                    <CardSkeleton lines={3} />
+                  ) : github.data ? (
+                    <Card>
+                      <EffortDistribution distribution={github.data.effortDistribution} />
+                    </Card>
+                  ) : null}
+                </div>
               </div>
             </div>
           </>
