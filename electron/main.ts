@@ -1,13 +1,13 @@
 import { app, BrowserWindow, shell, protocol, net, Menu } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import "./boot-env";
+import { ensureDatabaseReady } from "./db/index";
 import { registerAllHandlers } from "./ipc/index";
 import { runExportSettings, runImportSettings } from "./ipc/settings-io";
 import { initAutoUpdate } from "./updater-service";
 
 const isDev = process.env.NODE_ENV === "development";
-
-app.setName("DevDash");
 
 // Must be called before app.whenReady() — registers the custom scheme as privileged
 // so it can load ES modules, use fetch, etc.
@@ -16,14 +16,6 @@ if (!isDev) {
     { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
   ]);
 }
-
-// Set DB path — in dev use project root, in production use userData
-process.env.DEVDASH_DB_PATH = isDev
-  ? path.join(process.cwd(), "devdash.db")
-  : path.join(app.getPath("userData"), "devdash.db");
-
-// Ensure DB schema is initialized (getDb runs migrations on first call)
-import("./db/index").then(({ getDb }) => getDb());
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -128,6 +120,8 @@ function buildMenu() {
 }
 
 app.whenReady().then(() => {
+  ensureDatabaseReady();
+
   if (!isDev) setupProtocol();
 
   // Set dock icon explicitly for dev mode (production uses build/icon.icns via electron-builder)

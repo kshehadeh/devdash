@@ -7,7 +7,12 @@ let _syncing = false;
 let _foregroundSyncDepth = 0;
 
 function idleProgress(): SyncProgressPayload {
-  const n = Math.max(1, getRegisteredSyncTasks().length);
+  let n = 1;
+  try {
+    n = Math.max(1, getRegisteredSyncTasks().length);
+  } catch {
+    // DB not ready yet (e.g. before ensureDatabaseReady)
+  }
   return {
     syncing: false,
     scope: "idle",
@@ -18,17 +23,24 @@ function idleProgress(): SyncProgressPayload {
   };
 }
 
-let _progress: SyncProgressPayload = idleProgress();
+let _progress: SyncProgressPayload | null = null;
+
+function progressState(): SyncProgressPayload {
+  if (_progress === null) _progress = idleProgress();
+  return _progress;
+}
 
 export function getSyncProgress(): SyncProgressPayload {
-  return { ..._progress, activeLabels: [..._progress.activeLabels] };
+  const p = progressState();
+  return { ...p, activeLabels: [...p.activeLabels] };
 }
 
 function emitProgress(patch: Partial<SyncProgressPayload>) {
+  const base = progressState();
   _progress = {
-    ..._progress,
+    ...base,
     ...patch,
-    activeLabels: patch.activeLabels ?? _progress.activeLabels,
+    activeLabels: patch.activeLabels ?? base.activeLabels,
   };
   broadcastSyncProgress(_progress);
 }

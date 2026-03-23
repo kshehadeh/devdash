@@ -12,6 +12,7 @@
     "electron:build:local": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false bun run build && bun run electron:compile && electron-builder --config.mac.notarize=false",
     "electron:build:publish": "bun run build && bun run electron:compile && electron-builder --publish always",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
+    "migrate-smoke": "bun run electron:compile && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/migrate-smoke.cjs",
     "release": "bash scripts/version.sh"
   },
   "build": {

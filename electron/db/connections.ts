@@ -21,10 +21,40 @@ interface DbRow {
   updated_at: string;
 }
 
+function clearInvalidToken(id: ConnectionId): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE connections
+     SET encrypted_token = NULL,
+         connected = 0,
+         updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(id);
+}
+
 function rowToModel(row: DbRow): ConnectionRecord {
+  let token: string | undefined;
+  if (row.encrypted_token) {
+    try {
+      token = decrypt(row.encrypted_token);
+    } catch (err) {
+      // Token cannot be decrypted on this machine/session; force reconnect.
+      console.warn(`[connections] Invalid encrypted token for ${row.id}:`, err);
+      clearInvalidToken(row.id as ConnectionId);
+      return {
+        id: row.id as ConnectionId,
+        token: undefined,
+        email: row.email ?? undefined,
+        org: row.org ?? undefined,
+        connected: false,
+        updatedAt: row.updated_at,
+      };
+    }
+  }
+
   return {
     id: row.id as ConnectionId,
-    token: row.encrypted_token ? decrypt(row.encrypted_token) : undefined,
+    token,
     email: row.email ?? undefined,
     org: row.org ?? undefined,
     connected: row.connected === 1,
@@ -49,13 +79,14 @@ export function saveConnection(
   input: { token?: string; email?: string; org?: string; connected?: boolean }
 ): ConnectionRecord {
   const db = getDb();
-  const existing = getConnection(id);
+  const existing = db.prepare("SELECT * FROM connections WHERE id = ?").get(id) as DbRow | undefined;
 
   const encryptedToken = input.token
     ? encrypt(input.token)
-    : (existing?.token ? encrypt(existing.token) : null);
+    : existing?.encrypted_token ?? null;
 
-  const connected = input.connected !== undefined ? (input.connected ? 1 : 0) : (existing?.connected ? 1 : 0);
+  const connected =
+    input.connected !== undefined ? (input.connected ? 1 : 0) : (existing?.connected ? 1 : 0);
 
   db.prepare(
     `INSERT INTO connections (id, encrypted_token, email, org, connected, updated_at)

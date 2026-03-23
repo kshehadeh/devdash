@@ -1,4 +1,8 @@
+import * as fs from "fs";
 import type Database from "better-sqlite3";
+
+/** Migrations that rebuild large tables — backup DB file before applying. */
+const MIGRATION_INDICES_WITH_FULL_BACKUP = new Set([5, 10]);
 
 export const MIGRATIONS: string[] = [
   // v1 — initial schema
@@ -280,7 +284,7 @@ export const MIGRATIONS: string[] = [
 
 
 
-export function runMigrations(db: Database.Database) {
+export function runMigrations(db: Database.Database, dbFilePath?: string) {
   // Ensure schema_version table exists before querying it
   db.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)");
   const versionRow = db.prepare("SELECT version FROM schema_version LIMIT 1").get() as
@@ -289,9 +293,14 @@ export function runMigrations(db: Database.Database) {
   const current = versionRow?.version ?? -1;
 
   for (let i = current + 1; i < MIGRATIONS.length; i++) {
-    db.exec(MIGRATIONS[i]);
-    db.prepare("UPDATE schema_version SET version = ?").run(i);
+    if (dbFilePath && MIGRATION_INDICES_WITH_FULL_BACKUP.has(i)) {
+      fs.copyFileSync(dbFilePath, `${dbFilePath}.pre-migration-${i}.bak`);
+    }
+    // Wrap migration + version bump in a transaction (DDL may still autocommit on some SQLite builds; backups cover risky steps).
+    const apply = db.transaction(() => {
+      db.exec(MIGRATIONS[i]);
+      db.prepare("UPDATE schema_version SET version = ?").run(i);
+    });
+    apply();
   }
-
-
 }
