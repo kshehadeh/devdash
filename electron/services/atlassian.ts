@@ -281,6 +281,70 @@ export async function fetchJiraTickets(
   }));
 }
 
+// ---------- Jira Notifications (assigned to me or watched by me, recently updated) ----------
+
+export async function fetchJiraAssignedOrWatchedUpdatedTickets(
+  site: string,
+  email: string,
+  token: string,
+  projectKeys?: string[],
+  days = 7,
+): Promise<JiraTicket[]> {
+  if (projectKeys !== undefined && projectKeys.length === 0) return [];
+
+  const baseUrl = `https://${site}.atlassian.net`;
+  const hdrs = headers(email, token);
+
+  const sinceDate = new Date();
+  sinceDate.setDate(sinceDate.getDate() - days);
+  const since = sinceDate.toISOString().split("T")[0];
+
+  const projectFilter =
+    projectKeys && projectKeys.length > 0 ? ` AND project IN (${jqlProjectKeysInList(projectKeys)})` : "";
+
+  const jql =
+    `(assignee = currentUser() OR watcher = currentUser()) ` +
+    `AND statusCategory != Done AND updated >= "${since}"${projectFilter} ORDER BY updated DESC`;
+
+  const res = await fetch(`${baseUrl}/rest/api/3/search/jql`, {
+    method: "POST",
+    headers: { ...hdrs, "Content-Type": "application/json" },
+    body: JSON.stringify({ jql, maxResults: 30, fields: ["summary", "status", "priority", "issuetype", "updated"] }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[JiraNotificationTickets] search failed:", res.status, body);
+    return [];
+  }
+
+  const data = await res.json();
+  const issues: {
+    id: string;
+    key: string;
+    fields: {
+      summary: string;
+      status: { name: string; statusCategory: { key: string } };
+      priority: { name: string };
+      issuetype: { name: string };
+      updated: string;
+    };
+  }[] = data.issues ?? [];
+
+  return issues.map((issue) => ({
+    id: issue.id,
+    key: issue.key,
+    title: issue.fields.summary,
+    status: issue.fields.status.name,
+    statusCategory: mapStatus(issue.fields.status.statusCategory.key),
+    priority: mapPriority(issue.fields.priority.name),
+    type: issue.fields.issuetype.name,
+    updatedAt: issue.fields.updated,
+    updatedAgo: timeAgo(issue.fields.updated),
+    url: `${baseUrl}/browse/${issue.key}`,
+  }));
+}
+
 // ---------- Completed Ticket Count (for ticket velocity) ----------
 
 export async function fetchCompletedTicketCount(

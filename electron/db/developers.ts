@@ -48,6 +48,12 @@ export function getDeveloper(id: string): Developer | null {
   return row ? rowToModel(row) : null;
 }
 
+export function getCurrentUserDeveloper(): Developer | null {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM developers WHERE is_current_user = 1 LIMIT 1").get() as DbRow | undefined;
+  return row ? rowToModel(row) : null;
+}
+
 export function createDeveloper(input: {
   name: string;
   role: string;

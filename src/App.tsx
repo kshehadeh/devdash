@@ -11,6 +11,7 @@ import Connections from "./pages/settings/Connections";
 import Sources from "./pages/settings/Sources";
 import Cache from "./pages/settings/Cache";
 import General from "./pages/settings/General";
+import NotificationsSettings from "./pages/settings/Notifications";
 import ReferenceLayout from "./components/layout/ReferenceLayout";
 import PullRequests from "./pages/reference/PullRequests";
 import Tickets from "./pages/reference/Tickets";
@@ -84,6 +85,7 @@ function RoutedApp() {
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="connections" replace />} />
           <Route path="connections" element={<Connections />} />
+          <Route path="notifications" element={<NotificationsSettings />} />
           <Route path="sources" element={<Sources />} />
           <Route path="cache" element={<Cache />} />
           <Route path="general" element={<General />} />

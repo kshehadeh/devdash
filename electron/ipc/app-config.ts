@@ -1,7 +1,12 @@
 import { ipcMain } from "electron";
 import { getConfig, setConfig } from "../db/config";
 
-const ALLOWED_KEYS = new Set(["onboarding_completed", "auto_update_enabled"]);
+const ALLOWED_KEYS = new Set([
+  "onboarding_completed",
+  "auto_update_enabled",
+  "notifications_enabled",
+  "notifications_poll_interval_ms",
+]);
 
 export function registerAppConfigHandlers() {
   ipcMain.handle("app-config:get", (_e, data: { key: string }) => {

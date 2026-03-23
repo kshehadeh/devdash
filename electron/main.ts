@@ -6,6 +6,7 @@ import { ensureDatabaseReady } from "./db/index";
 import { registerAllHandlers } from "./ipc/index";
 import { runExportSettings, runImportSettings } from "./ipc/settings-io";
 import { initAutoUpdate } from "./updater-service";
+import { startNotificationScheduler } from "./notifications/scheduler";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -348,6 +349,7 @@ app.whenReady().then(() => {
   registerAllHandlers(() => mainWindow);
   buildMenu();
   createWindow();
+  startNotificationScheduler(() => mainWindow);
   initAutoUpdate(() => mainWindow, isDev);
 
   app.on("activate", () => {

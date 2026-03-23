@@ -77,7 +77,7 @@ The product is organized around three integration categories — **Code**, **Wor
 | Work | Jira, Linear |
 | Docs | Confluence |
 
-See [docs/architecture.md](docs/architecture.md) for the full system design and [docs/metrics.md](docs/metrics.md) for detailed metric definitions.
+See [docs/architecture.md](docs/architecture.md) for the full system design, [docs/metrics.md](docs/metrics.md) for metric definitions, and [docs/notifications.md](docs/notifications.md) for the integration notification system.
 
 ## Contributing
 

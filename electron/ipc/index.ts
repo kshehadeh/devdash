@@ -11,11 +11,13 @@ import { registerIntegrationHandlers } from "./integrations";
 import { registerCacheAdminHandlers } from "./cache-admin";
 import { registerAppConfigHandlers } from "./app-config";
 import { registerUpdateHandlers } from "./updates";
+import { registerNotificationHandlers } from "./notifications";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerAppConfigHandlers();
   registerUpdateHandlers();
+  registerNotificationHandlers(getWindow);
   registerDeveloperHandlers();
   registerConnectionHandlers();
   registerIntegrationHandlers();

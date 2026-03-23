@@ -200,3 +200,29 @@ export interface DeveloperSourceAssignment {
   developerId: string;
   sourceId: string;
 }
+
+export type NotificationStatus = "new" | "read";
+
+export interface NotificationRecord {
+  id: string;
+  developerId: string;
+  integration: string;
+  notificationType: string;
+  fingerprint: string;
+  title: string;
+  body: string;
+  payload: Record<string, unknown>;
+  sourceUrl: string | null;
+  status: NotificationStatus;
+  eventUpdatedAt: string;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface NotificationPreference {
+  integration: string;
+  notificationType: string;
+  enabled: boolean;
+  fingerprintStrategy: Record<string, unknown>;
+  updatedAt: string;
+}

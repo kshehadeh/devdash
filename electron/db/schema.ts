@@ -288,6 +288,40 @@ export const MIGRATIONS: string[] = [
     ON developers(is_current_user)
     WHERE is_current_user = 1;
   `,
+  // v14 — notifications + notification preferences
+  `
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    developer_id TEXT NOT NULL,
+    integration TEXT NOT NULL,
+    notification_type TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    source_url TEXT,
+    status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new', 'read')),
+    event_updated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    read_at TEXT,
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE,
+    UNIQUE (developer_id, integration, notification_type, fingerprint)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_notifications_status_created
+    ON notifications(status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_notifications_dev_status_created
+    ON notifications(developer_id, status, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS notification_preferences (
+    integration TEXT NOT NULL,
+    notification_type TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    fingerprint_strategy_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (integration, notification_type)
+  );
+  `,
 ];
 
 

@@ -1,6 +1,7 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { GitMerge, Ticket, BookOpen } from "lucide-react";
 import { clsx } from "clsx";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 
 const referenceNav = [
   { href: "/reference/pull-requests", icon: GitMerge, label: "Pull Requests", description: "Cached PR data" },
@@ -13,10 +14,11 @@ export default function ReferenceLayout() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-center px-6 h-14 bg-[var(--surface-container-low)] shrink-0">
+      <header className="flex items-center justify-between px-6 h-14 bg-[var(--surface-container-low)] shrink-0">
         <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
           Reference
         </h1>
+        <NotificationCenter />
       </header>
 
       <div className="flex flex-1 overflow-hidden">

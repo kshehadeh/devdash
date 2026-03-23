@@ -13,6 +13,7 @@ At a high level, it stores:
 - Source configuration (`data_sources`, `developer_sources`)
 - Sync state (`sync_log`)
 - Provider cache tables for dashboard/reporting reads (GitHub, Jira, Confluence, Linear)
+- Integration notifications and preferences (`notifications`, `notification_preferences`)
 - Schema migration version (`schema_version`)
 
 The renderer process never talks to SQLite directly. Database access lives in the Electron main process through DB modules in `electron/db/` and IPC handlers in `electron/ipc/`.
@@ -127,6 +128,11 @@ Current schema evolves over migrations, but conceptually it is grouped as:
 - Confluence: `cached_confluence_pages`
 - Linear: `cached_linear_issues`
 
+### Notification tables
+
+- `notifications`: concrete delivered integration events with status (`new`, `read`)
+- `notification_preferences`: per integration/type enablement and strategy metadata
+
 ### Migration metadata
 
 - `schema_version`: single-row table tracking the latest applied migration index
@@ -160,3 +166,4 @@ This compiles Electron DB code and runs all migrations against a fresh temporary
 
 - Architecture overview: `docs/architecture.md`
 - Metrics definitions: `docs/metrics.md`
+- Notifications system: `docs/notifications.md`

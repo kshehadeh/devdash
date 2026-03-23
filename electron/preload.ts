@@ -21,4 +21,18 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.removeListener("update:available", handler);
     };
   },
+  onNotificationOpen: (callback: (payload: { id: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { id: string }) => callback(payload);
+    ipcRenderer.on("notifications:open", handler);
+    return () => {
+      ipcRenderer.removeListener("notifications:open", handler);
+    };
+  },
+  onNotificationsChanged: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("notifications:changed", handler);
+    return () => {
+      ipcRenderer.removeListener("notifications:changed", handler);
+    };
+  },
 });
