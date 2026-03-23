@@ -299,6 +299,7 @@ export function getCachedJiraTickets(devId: string, site: string, days: number, 
   return rows.map((row) => ({
     id: row.issue_key,
     key: row.issue_key,
+    developerId: devId,
     title: row.summary,
     status: row.status,
     statusCategory: row.status_category as "todo" | "in_progress" | "done",
@@ -416,6 +417,7 @@ export function getCachedLinearTicketsAsJiraShape(
     return {
       id: row.identifier,
       key: row.identifier,
+      developerId: devId,
       title: row.title,
       status: row.state_name || "Open",
       statusCategory: cat,

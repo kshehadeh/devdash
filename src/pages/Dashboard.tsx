@@ -216,7 +216,7 @@ export default function DashboardPage() {
                         Last {lookbackDays} days
                       </span>
                     </div>
-                    <JiraTicketList tickets={tickets.data.jiraTickets} />
+                    <JiraTicketList tickets={tickets.data.jiraTickets} onInvalidTicket={tickets.refresh} />
                   </Card>
                 ) : null}
               </div>

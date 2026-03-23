@@ -3,10 +3,12 @@
 import type React from "react";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "../ui/Badge";
+import { invoke } from "@/lib/api";
 import type { JiraTicket } from "../../../lib/types";
 
 interface JiraTicketListProps {
   tickets: JiraTicket[];
+  onInvalidTicket?: (issueKey: string) => void;
 }
 
 const priorityDot: Record<JiraTicket["priority"], string> = {
@@ -22,7 +24,14 @@ const categoryBadge: Record<JiraTicket["statusCategory"], React.ReactElement> = 
   done: <Badge variant="success">DONE</Badge>,
 };
 
-export function JiraTicketList({ tickets }: JiraTicketListProps) {
+export function JiraTicketList({ tickets, onInvalidTicket }: JiraTicketListProps) {
+  function handleTicketClick(ticket: JiraTicket) {
+    if (!ticket.developerId) return;
+    invoke<{ exists: boolean }>("jira:ticket:validate", { issueKey: ticket.key, developerId: ticket.developerId })
+      .then((result: { exists: boolean }) => { if (!result.exists) onInvalidTicket?.(ticket.key); })
+      .catch(() => { /* ignore validation errors */ });
+  }
+
   if (tickets.length === 0) {
     return (
       <p className="text-xs text-[var(--on-surface-variant)] py-4 text-center">
@@ -39,6 +48,7 @@ export function JiraTicketList({ tickets }: JiraTicketListProps) {
           href={ticket.url}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => handleTicketClick(ticket)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--surface-container-high)] transition-colors group"
         >
           <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${priorityDot[ticket.priority]}`} />

@@ -119,12 +119,12 @@ Current schema evolves over migrations, but conceptually it is grouped as:
 
 ### Sync bookkeeping
 
-- `sync_log`: per developer and data type sync cursor, status, and errors
+- `sync_log`: per developer and data type sync cursor, status, and errors. In addition to the standard integration data types (e.g. `jira_tickets`), this table also stores a `jira_reconcile` entry per developer that tracks when the last daily reconciliation ran (via `last_cursor = YYYY-MM-DD`).
 
 ### Provider cache tables
 
 - GitHub: `cached_contributions`, `cached_pull_requests`, `cached_review_requests`
-- Jira: `cached_jira_tickets`
+- Jira: `cached_jira_tickets` — stale/deleted tickets are removed by two mechanisms: (1) a daily reconciliation pass (`reconcileJiraTickets` in `electron/sync/atlassian-sync.ts`) that diffs live Jira issue keys against the cache and deletes any that no longer exist; and (2) on-demand validation triggered when a user clicks a ticket link (`jira:ticket:validate` IPC handler in `electron/ipc/reference.ts`), which calls the Jira single-issue endpoint and removes the row immediately if it returns 404.
 - Confluence: `cached_confluence_pages`
 - Linear: `cached_linear_issues`
 

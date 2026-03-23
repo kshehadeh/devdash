@@ -58,7 +58,7 @@ async function resolveAccountId(
   return null;
 }
 
-function getAtlassianContext(developerId: string) {
+export function getAtlassianContextForValidation(developerId: string) {
   const dev = getDeveloper(developerId);
   const atConn = getConnection("atlassian");
   const workEmail = getWorkEmailForDeveloper(developerId);
@@ -83,7 +83,7 @@ function getAtlassianContext(developerId: string) {
 
 export async function syncJiraTickets(developerId: string): Promise<void> {
   const db = getDb();
-  const ctx = getAtlassianContext(developerId);
+  const ctx = getAtlassianContextForValidation(developerId);
   if (!ctx) return;
 
   setSyncStatus(developerId, "jira_tickets", "syncing");
@@ -209,9 +209,85 @@ export async function syncJiraTickets(developerId: string): Promise<void> {
     } while (nextPageToken);
 
     setSyncStatus(developerId, "jira_tickets", "ok", null, latestUpdated.split("T")[0]);
+
+    // Run daily reconciliation to remove tickets deleted in Jira
+    reconcileJiraTickets(developerId).catch((err) =>
+      console.error("[SyncJiraTickets] Reconciliation error:", err),
+    );
   } catch (err) {
     setSyncStatus(developerId, "jira_tickets", "error", String(err));
     throw err;
+  }
+}
+
+// ---------- Jira Ticket Reconciliation (daily) ----------
+
+export async function reconcileJiraTickets(developerId: string): Promise<void> {
+  const db = getDb();
+  const ctx = getAtlassianContextForValidation(developerId);
+  if (!ctx || ctx.projectKeys.length === 0) return;
+
+  const today = new Date().toISOString().split("T")[0];
+  const log = db.prepare(
+    "SELECT last_cursor FROM sync_log WHERE developer_id = ? AND data_type = 'jira_reconcile'",
+  ).get(developerId) as { last_cursor: string | null } | undefined;
+
+  if (log?.last_cursor === today) return; // already reconciled today
+
+  const baseUrl = `https://${ctx.site}.atlassian.net`;
+  const hdrs = atlHeaders(ctx.email, ctx.token);
+
+  const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
+  if (!accountId) return;
+
+  const projectFilter = jqlProjectKeysInList(ctx.projectKeys);
+  const jql = `assignee = "${accountId}" AND project IN (${projectFilter}) AND updated >= "-365d" ORDER BY updated ASC`;
+
+  const liveKeys = new Set<string>();
+  let nextPageToken: string | undefined;
+
+  try {
+    do {
+      const body: Record<string, unknown> = { jql, maxResults: 100, fields: ["key"] };
+      if (nextPageToken) body.nextPageToken = nextPageToken;
+
+      const res = await fetch(`${baseUrl}/rest/api/3/search/jql`, {
+        method: "POST",
+        headers: hdrs,
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) break;
+
+      const data = await res.json();
+      const issues: { key: string }[] = data.issues ?? [];
+      for (const issue of issues) liveKeys.add(issue.key);
+      nextPageToken = data.nextPageToken ?? undefined;
+    } while (nextPageToken);
+
+    if (liveKeys.size === 0) return; // bail out if API returned nothing (avoids wiping cache on error)
+
+    const cached = db.prepare(
+      "SELECT issue_key FROM cached_jira_tickets WHERE developer_id = ?",
+    ).all(developerId) as { issue_key: string }[];
+
+    const toDelete = cached.map((r) => r.issue_key).filter((k) => !liveKeys.has(k));
+    if (toDelete.length > 0) {
+      const placeholders = toDelete.map(() => "?").join(", ");
+      db.prepare(
+        `DELETE FROM cached_jira_tickets WHERE developer_id = ? AND issue_key IN (${placeholders})`,
+      ).run(developerId, ...toDelete);
+      console.log(`[ReconcileJira] Removed ${toDelete.length} deleted ticket(s) for developer ${developerId}`);
+    }
+
+    db.prepare(`
+      INSERT INTO sync_log (developer_id, data_type, last_synced_at, status, last_cursor)
+      VALUES (?, 'jira_reconcile', datetime('now'), 'ok', ?)
+      ON CONFLICT(developer_id, data_type) DO UPDATE SET
+        last_synced_at = datetime('now'), status = 'ok', last_cursor = excluded.last_cursor
+    `).run(developerId, today);
+  } catch (err) {
+    console.error("[ReconcileJira] Error:", err);
   }
 }
 
@@ -219,7 +295,7 @@ export async function syncJiraTickets(developerId: string): Promise<void> {
 
 export async function syncConfluencePages(developerId: string): Promise<void> {
   const db = getDb();
-  const ctx = getAtlassianContext(developerId);
+  const ctx = getAtlassianContextForValidation(developerId);
   if (!ctx) return;
 
   setSyncStatus(developerId, "confluence_pages", "syncing");

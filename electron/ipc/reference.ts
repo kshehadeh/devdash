@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { getDb } from "../db/index";
 import { getIntegrationSettings } from "../db/integration-settings";
 import { getConnection } from "../db/connections";
+import { getAtlassianContextForValidation } from "../sync/atlassian-sync";
 
 export function registerReferenceHandlers() {
   ipcMain.handle("reference:pull-requests", () => {
@@ -45,6 +46,7 @@ export function registerReferenceHandlers() {
       };
       return rows.map((r) => ({
         developerName: r.developer_name,
+        developerId: r.developer_id,
         issueKey: r.identifier,
         summary: r.title,
         status: r.state_name,
@@ -68,12 +70,46 @@ export function registerReferenceHandlers() {
     `).all() as any[];
 
     return rows.map((r) => ({
-      developerName: r.developer_name, issueKey: r.issue_key, summary: r.summary,
-      status: r.status, statusCategory: r.status_category,
-      projectKey: r.project_key ?? "—", updatedAt: r.updated_at,
+      developerName: r.developer_name,
+      developerId: r.developer_id,
+      issueKey: r.issue_key,
+      summary: r.summary,
+      status: r.status,
+      statusCategory: r.status_category,
+      projectKey: r.project_key ?? "—",
+      updatedAt: r.updated_at,
       url: site ? `https://${site}.atlassian.net/browse/${r.issue_key}` : "",
       source: "jira" as const,
     }));
+  });
+
+  ipcMain.handle("jira:ticket:validate", async (_e, { issueKey, developerId }: { issueKey: string; developerId: string }) => {
+    const db = getDb();
+    const ctx = getAtlassianContextForValidation(developerId);
+    if (!ctx) return { exists: true }; // no credentials — assume still valid
+
+    try {
+      const res = await fetch(
+        `https://${ctx.site}.atlassian.net/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=id`,
+        {
+          headers: {
+            Authorization: "Basic " + Buffer.from(`${ctx.email}:${ctx.token}`).toString("base64"),
+            Accept: "application/json",
+          },
+        },
+      );
+
+      if (res.status === 404) {
+        db.prepare("DELETE FROM cached_jira_tickets WHERE developer_id = ? AND issue_key = ?")
+          .run(developerId, issueKey);
+        console.log(`[ValidateJira] Removed deleted ticket ${issueKey} for developer ${developerId}`);
+        return { exists: false };
+      }
+
+      return { exists: res.ok };
+    } catch {
+      return { exists: true }; // network error — assume still valid
+    }
   });
 
   ipcMain.handle("reference:documents", () => {

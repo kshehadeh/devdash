@@ -93,6 +93,7 @@ export interface ConfluenceActivity {
 export interface JiraTicket {
   id: string;
   key: string;
+  developerId?: string;
   title: string;
   status: string;
   statusCategory: "todo" | "in_progress" | "done";
