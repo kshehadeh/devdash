@@ -501,7 +501,7 @@ export async function fetchConfluenceDocs(
   }
 
   const data = await res.json();
-  const results: { id: string; title: string; version?: { number: number } }[] = data.results ?? [];
+  const results: { id: string; title: string; version?: { number: number }; _links?: { webui?: string } }[] = data.results ?? [];
 
   const docs = await Promise.all(
     results.map(async (page) => {
@@ -523,7 +523,7 @@ export async function fetchConfluenceDocs(
         title: page.title,
         reads,
         edits,
-        url: `${baseUrl}/pages/${page.id}`,
+        url: page._links?.webui ? `${baseUrl}${page._links.webui}` : `${baseUrl}/pages/${page.id}`,
       };
     }),
   );
@@ -565,7 +565,7 @@ export async function fetchConfluenceActivity(
       pageTitle: page.title,
       description: `Updated ${page.title}`,
       timeAgo: timeAgo(when),
-      url: `${baseUrl}/pages/${page.id}`,
+      url: page._links?.webui ? `${baseUrl}${page._links.webui}` : `${baseUrl}/pages/${page.id}`,
     };
   });
 }
