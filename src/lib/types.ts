@@ -281,13 +281,23 @@ export interface NotificationsListResponse {
   unreadCount: number;
 }
 
+export interface NotificationSourceGroup {
+  sourceItemKey: string;
+  sourceLabel: string;
+  sourceUrl: string | null;
+  count: number;
+  unreadCount: number;
+  latestAt: string;
+  notifications: NotificationRecord[];
+}
+
 export interface NotificationGroup {
   notificationType: string;
   integration: string;
   label: string;
   count: number;
   unreadCount: number;
-  notifications: NotificationRecord[];
+  sourceGroups: NotificationSourceGroup[];
 }
 
 export interface NotificationsGroupedResponse {

@@ -5,38 +5,18 @@ import { useSearchParams } from "react-router-dom";
 import { Bell, ChevronDown, ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
-import type { NotificationGroup, NotificationsGroupedResponse } from "@/lib/types";
+import type { NotificationGroup, NotificationRecord, NotificationSourceGroup, NotificationsGroupedResponse } from "@/lib/types";
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-function getDisplayTitle(n: { notificationType: string; title: string; payload: Record<string, unknown> }): string {
-  const { notificationType, title, payload } = n;
-  switch (notificationType) {
-    case "assigned_or_watched_ticket_updated": {
-      const key = typeof payload.issueKey === "string" ? payload.issueKey : null;
-      return key ? `${key}: ${title}` : title;
-    }
-    case "review_requested": {
-      const prNumber = typeof payload.prNumber === "number" ? payload.prNumber : null;
-      return prNumber ? `#${prNumber} ${title}` : title;
-    }
-    default:
-      return title;
-  }
-}
-
-function getDisplaySubtext(n: { notificationType: string; body: string; payload: Record<string, unknown> }): string | null {
+function getNotificationSubtext(n: NotificationRecord): string | null {
   const { notificationType, body, payload } = n;
   switch (notificationType) {
     case "review_requested": {
       const author = typeof payload.authorLogin === "string" ? payload.authorLogin : null;
-      const repo = typeof payload.repo === "string" ? payload.repo : null;
-      const parts = [];
-      if (author) parts.push(`@${author}`);
-      if (repo) parts.push(repo);
-      return parts.length ? parts.join(" · ") : null;
+      return author ? `Requested by @${author}` : null;
     }
     case "assigned_or_watched_ticket_updated": {
       const status = typeof payload.status === "string" ? payload.status : null;
@@ -71,6 +51,8 @@ export default function NotificationsPage() {
   const [groups, setGroups] = useState<NotificationGroup[]>([]);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Tracks expanded source-item sub-groups: "notificationType::sourceItemKey"
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -120,6 +102,20 @@ export default function NotificationsPage() {
     });
   }
 
+  function toggleExpandSource(notificationType: string, sourceItemKey: string) {
+    const key = `${notificationType}::${sourceItemKey}`;
+    setExpandedSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function isSourceExpanded(notificationType: string, sourceItemKey: string) {
+    return expandedSources.has(`${notificationType}::${sourceItemKey}`);
+  }
+
   function scrollToGroup(notificationType: string) {
     setSearchParams({ group: notificationType });
     setExpanded((prev) => new Set([...prev, notificationType]));
@@ -131,6 +127,13 @@ export default function NotificationsPage() {
 
   async function markGroupRead(notificationType: string) {
     await invoke("notifications:mark-group-read", { notificationType });
+    void load();
+  }
+
+  async function markSourceRead(sg: NotificationSourceGroup) {
+    const ids = sg.notifications.filter((n) => n.status === "new").map((n) => n.id);
+    if (!ids.length) return;
+    await invoke("notifications:mark-batch-read", { ids });
     void load();
   }
 
@@ -282,32 +285,95 @@ export default function NotificationsPage() {
                     )}
                   </div>
 
-                  {/* Notification rows */}
+                  {/* Source-item sub-groups */}
                   {isExpanded && (
                     <div className="divide-y divide-[var(--outline-variant)]/10 rounded-b-md overflow-hidden">
-                      {group.notifications.map((n) => (
-                        <button
-                          key={n.id}
-                          onClick={() => void openNotification(n.id, n.sourceUrl)}
-                          className="w-full text-left px-4 py-3 hover:bg-[var(--surface-container-low)] transition-colors flex items-start gap-3"
-                        >
-                          <span className="mt-2 shrink-0 w-2 h-2 rounded-full block" style={{ backgroundColor: n.status === "new" ? "var(--primary)" : "transparent", border: n.status !== "new" ? "1px solid var(--outline-variant)" : "none" }} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm text-[var(--on-surface)] truncate">{getDisplayTitle(n)}</p>
-                              {n.sourceUrl && (
-                                <ExternalLink size={11} className="text-[var(--on-surface-variant)] shrink-0" />
+                      {group.sourceGroups.map((sg) => {
+                        const srcExpanded = isSourceExpanded(group.notificationType, sg.sourceItemKey);
+                        const multiRow = sg.count > 1;
+                        return (
+                          <div key={sg.sourceItemKey}>
+                            {/* Source item header */}
+                            <div className="flex items-center gap-2 px-4 py-2.5 bg-[var(--surface-container-low)]/60 hover:bg-[var(--surface-container-low)] transition-colors">
+                              {multiRow ? (
+                                <button
+                                  className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                                  onClick={() => toggleExpandSource(group.notificationType, sg.sourceItemKey)}
+                                >
+                                  <span className="text-[var(--on-surface-variant)] shrink-0">
+                                    {srcExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                  </span>
+                                  <p className="text-xs font-semibold text-[var(--on-surface)] truncate">{sg.sourceLabel}</p>
+                                  <span className="text-[10px] font-label text-[var(--on-surface-variant)]/60 shrink-0">
+                                    {sg.count} update{sg.count !== 1 ? "s" : ""}
+                                  </span>
+                                  {sg.unreadCount > 0 && (
+                                    <span className="shrink-0 min-w-4 h-4 px-1 rounded-full bg-[var(--error)] text-white text-[9px] font-bold leading-4 text-center">
+                                      {sg.unreadCount}
+                                    </span>
+                                  )}
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="shrink-0 w-1.5 h-1.5 rounded-full block" style={{ backgroundColor: sg.unreadCount > 0 ? "var(--primary)" : "transparent", border: sg.unreadCount === 0 ? "1px solid var(--outline-variant)" : "none" }} />
+                                  <p className="text-xs font-semibold text-[var(--on-surface)] truncate">{sg.sourceLabel}</p>
+                                </div>
                               )}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {sg.sourceUrl && (
+                                  <button
+                                    onClick={() => window.open(sg.sourceUrl!)}
+                                    className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]"
+                                    title="Open source"
+                                  >
+                                    <ExternalLink size={11} />
+                                  </button>
+                                )}
+                                {sg.unreadCount > 0 && (
+                                  <button
+                                    onClick={() => void markSourceRead(sg)}
+                                    className="text-[10px] font-label text-[var(--primary)] hover:underline"
+                                  >
+                                    Mark read
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            {getDisplaySubtext(n) && (
-                              <p className="text-xs text-[var(--on-surface-variant)] truncate mt-0.5">{getDisplaySubtext(n)}</p>
+
+                            {/* Individual notification rows: always shown for single-item groups, toggled for multi */}
+                            {(!multiRow || srcExpanded) && (
+                              <div className="divide-y divide-[var(--outline-variant)]/10">
+                                {sg.notifications.map((n) => {
+                                  const subtext = getNotificationSubtext(n);
+                                  return (
+                                    <button
+                                      key={n.id}
+                                      onClick={() => void openNotification(n.id, n.sourceUrl)}
+                                      className="w-full text-left px-6 py-2.5 hover:bg-[var(--surface-container-low)] transition-colors flex items-start gap-3"
+                                    >
+                                      <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full block" style={{ backgroundColor: n.status === "new" ? "var(--primary)" : "transparent", border: n.status !== "new" ? "1px solid var(--outline-variant)" : "none" }} />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <p className="text-xs text-[var(--on-surface)] truncate">{n.title}</p>
+                                          {n.sourceUrl && (
+                                            <ExternalLink size={10} className="text-[var(--on-surface-variant)] shrink-0" />
+                                          )}
+                                        </div>
+                                        {subtext && (
+                                          <p className="text-[10px] text-[var(--on-surface-variant)] truncate mt-0.5">{subtext}</p>
+                                        )}
+                                        <p className="text-[10px] font-label text-[var(--on-surface-variant)]/60 mt-1">
+                                          {formatWhen(n.createdAt)}
+                                        </p>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             )}
-                            <p className="text-[10px] font-label text-[var(--on-surface-variant)]/70 mt-1">
-                              {formatWhen(n.createdAt)}
-                            </p>
                           </div>
-                        </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

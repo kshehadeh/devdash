@@ -565,6 +565,7 @@ export async function fetchConfluenceActivity(
       pageTitle: page.title,
       description: `Updated ${page.title}`,
       timeAgo: timeAgo(when),
+      updatedAt: when,
       url: page._links?.webui ? `${baseUrl}${page._links.webui}` : `${baseUrl}/pages/${page.id}`,
     };
   });

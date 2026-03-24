@@ -88,31 +88,34 @@ export function NotificationCenter() {
             </button>
           </div>
 
-          <div className="max-h-[300px] overflow-y-auto">
+          <div className="max-h-[320px] overflow-y-auto">
             {loading ? (
               <p className="px-3 py-4 text-xs text-[var(--on-surface-variant)]">Loading...</p>
             ) : groups.length === 0 ? (
               <p className="px-3 py-4 text-xs text-[var(--on-surface-variant)]">No notifications yet.</p>
             ) : (
-              groups.map((g) => (
-                <button
-                  key={g.notificationType}
-                  onClick={() => navigateToGroup(g.notificationType)}
-                  className="w-full text-left px-3 py-2.5 border-b border-[var(--outline-variant)]/10 hover:bg-[var(--surface-bright)] transition-colors flex items-center justify-between gap-2"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm text-[var(--on-surface)] truncate">{g.label}</p>
-                    <p className="text-[10px] font-label text-[var(--on-surface-variant)]/70 capitalize mt-0.5">
-                      {g.integration} · {g.count} total
-                    </p>
-                  </div>
-                  {g.unreadCount > 0 && (
-                    <span className="shrink-0 min-w-4 h-4 px-1 rounded-full bg-[var(--error)] text-white text-[9px] font-bold leading-4 text-center">
-                      {g.unreadCount}
-                    </span>
-                  )}
-                </button>
-              ))
+              groups.flatMap((g) =>
+                g.sourceGroups.map((sg) => (
+                  <button
+                    key={`${g.notificationType}::${sg.sourceItemKey}`}
+                    onClick={() => navigateToGroup(g.notificationType)}
+                    className="w-full text-left px-3 py-2 border-b border-[var(--outline-variant)]/10 hover:bg-[var(--surface-bright)] transition-colors flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs text-[var(--on-surface)] truncate">{sg.sourceLabel}</p>
+                      <p className="text-[10px] font-label text-[var(--on-surface-variant)]/60 capitalize mt-0.5">
+                        {g.label} · {g.integration}
+                        {sg.count > 1 ? ` · ${sg.count} updates` : ""}
+                      </p>
+                    </div>
+                    {sg.unreadCount > 0 && (
+                      <span className="shrink-0 min-w-4 h-4 px-1 rounded-full bg-[var(--error)] text-white text-[9px] font-bold leading-4 text-center">
+                        {sg.unreadCount}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )
             )}
           </div>
 

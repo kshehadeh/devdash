@@ -5,6 +5,7 @@ import { getWorkEmailForDeveloper } from "../db/developer-identity";
 import { getIntegrationSettings } from "../db/integration-settings";
 import { fetchReviewRequests } from "../services/github";
 import { fetchConfluenceActivity, fetchJiraAssignedOrWatchedUpdatedTickets } from "../services/atlassian";
+import type { NotificationRecord } from "../db/notifications";
 
 export interface NotificationEvent {
   title: string;
@@ -22,6 +23,10 @@ export interface NotificationDefinition {
   strategy: { id: string; version: number };
   poll: (developerId: string) => Promise<NotificationEvent[]>;
   fingerprint: (event: NotificationEvent) => string;
+  /** Stable key identifying the source item (e.g. "repo:prNumber", "PROJ-123"). Used for sub-grouping. */
+  sourceItemKey: (record: NotificationRecord) => string;
+  /** Human-readable label for the source item group header. */
+  sourceItemLabel: (record: NotificationRecord) => string;
 }
 
 const githubReviewRequested: NotificationDefinition = {
@@ -54,6 +59,16 @@ const githubReviewRequested: NotificationDefinition = {
     const repo = typeof event.payload?.repo === "string" ? event.payload.repo : "unknown";
     const prNumber = typeof event.payload?.prNumber === "number" ? event.payload.prNumber : 0;
     return `${repo}:${prNumber}:${event.eventUpdatedAt}`;
+  },
+  sourceItemKey(record) {
+    const repo = typeof record.payload.repo === "string" ? record.payload.repo : "unknown";
+    const prNumber = typeof record.payload.prNumber === "number" ? record.payload.prNumber : 0;
+    return `${repo}:${prNumber}`;
+  },
+  sourceItemLabel(record) {
+    const repo = typeof record.payload.repo === "string" ? record.payload.repo : "unknown";
+    const prNumber = typeof record.payload.prNumber === "number" ? record.payload.prNumber : 0;
+    return `${repo} #${prNumber}: ${record.title}`;
   },
 };
 
@@ -91,6 +106,13 @@ const jiraUpdatedTickets: NotificationDefinition = {
     const issueKey = typeof event.payload?.issueKey === "string" ? event.payload.issueKey : "unknown";
     return `${issueKey}:${event.eventUpdatedAt}`;
   },
+  sourceItemKey(record) {
+    return typeof record.payload.issueKey === "string" ? record.payload.issueKey : "unknown";
+  },
+  sourceItemLabel(record) {
+    const issueKey = typeof record.payload.issueKey === "string" ? record.payload.issueKey : "unknown";
+    return `${issueKey}: ${record.title}`;
+  },
 };
 
 const confluencePageEdited: NotificationDefinition = {
@@ -98,7 +120,7 @@ const confluencePageEdited: NotificationDefinition = {
   notificationType: "page_activity",
   label: "Confluence Page Activity",
   defaultEnabled: false,
-  strategy: { id: "description_timeago", version: 1 },
+  strategy: { id: "page_title_updated_at", version: 1 },
   async poll(developerId: string) {
     const atConn = getConnection("atlassian");
     const workEmail = getWorkEmailForDeveloper(developerId);
@@ -111,18 +133,23 @@ const confluencePageEdited: NotificationDefinition = {
       title: item.pageTitle,
       body: "",
       sourceUrl: item.url,
-      // API only provides relative label in this endpoint. Use now so repeating activity labels still dedupe by fingerprint strategy changes.
-      eventUpdatedAt: new Date().toISOString(),
+      eventUpdatedAt: item.updatedAt,
       payload: {
         pageTitle: item.pageTitle,
         timeAgo: item.timeAgo,
+        updatedAt: item.updatedAt,
       },
     }));
   },
   fingerprint(event) {
     const pageTitle = typeof event.payload?.pageTitle === "string" ? event.payload.pageTitle : event.title;
-    const rel = typeof event.payload?.timeAgo === "string" ? event.payload.timeAgo : "";
-    return `${pageTitle}:${rel}`;
+    return `${pageTitle}:${event.eventUpdatedAt}`;
+  },
+  sourceItemKey(record) {
+    return typeof record.payload.pageTitle === "string" ? record.payload.pageTitle : record.title;
+  },
+  sourceItemLabel(record) {
+    return typeof record.payload.pageTitle === "string" ? record.payload.pageTitle : record.title;
   },
 };
 

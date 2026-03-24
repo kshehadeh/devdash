@@ -180,44 +180,94 @@ export function markAllNotificationsRead(developerId?: string): number {
   ).run().changes;
 }
 
+export interface NotificationSourceGroup {
+  sourceItemKey: string;
+  sourceLabel: string;
+  sourceUrl: string | null;
+  count: number;
+  unreadCount: number;
+  latestAt: string;
+  notifications: NotificationRecord[];
+}
+
 export interface NotificationGroup {
   notificationType: string;
   integration: string;
   count: number;
   unreadCount: number;
-  notifications: NotificationRecord[];
+  sourceGroups: NotificationSourceGroup[];
 }
 
-export function groupedNotificationsForDeveloper(developerId: string, limit = 200): NotificationGroup[] {
+export interface SourceItemKeyFn {
+  sourceItemKey: (record: NotificationRecord) => string;
+  sourceItemLabel: (record: NotificationRecord) => string;
+}
+
+export function groupedNotificationsForDeveloper(
+  developerId: string,
+  keyFns: Map<string, SourceItemKeyFn>,
+  limit = 200,
+): NotificationGroup[] {
   const db = getDb();
-  // Order only by date so group insertion order (and thus group order) is stable
-  // regardless of read/unread status changes.
   const rows = db.prepare(
     `SELECT * FROM notifications WHERE developer_id = ? ORDER BY datetime(created_at) DESC LIMIT ?`,
   ).all(developerId, limit) as NotificationDbRow[];
   const all = rows.map(mapRow);
 
-  const map = new Map<string, NotificationGroup>();
+  const typeMap = new Map<string, { integration: string; records: NotificationRecord[] }>();
   for (const n of all) {
-    const key = n.notificationType;
-    if (!map.has(key)) {
-      map.set(key, { notificationType: n.notificationType, integration: n.integration, count: 0, unreadCount: 0, notifications: [] });
+    if (!typeMap.has(n.notificationType)) {
+      typeMap.set(n.notificationType, { integration: n.integration, records: [] });
     }
-    const g = map.get(key)!;
-    g.count++;
-    if (n.status === "new") g.unreadCount++;
-    g.notifications.push(n);
+    typeMap.get(n.notificationType)!.records.push(n);
   }
 
-  // Sort within each group: unread first, then most recent.
-  for (const g of map.values()) {
-    g.notifications.sort((a, b) => {
-      if (a.status === b.status) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      return a.status === "new" ? -1 : 1;
+  const groups: NotificationGroup[] = [];
+  for (const [notificationType, { integration, records }] of typeMap) {
+    const fns = keyFns.get(notificationType);
+
+    const sourceMap = new Map<string, NotificationSourceGroup>();
+    for (const n of records) {
+      const key = fns ? fns.sourceItemKey(n) : n.title;
+      const label = fns ? fns.sourceItemLabel(n) : n.title;
+      if (!sourceMap.has(key)) {
+        sourceMap.set(key, {
+          sourceItemKey: key,
+          sourceLabel: label,
+          sourceUrl: n.sourceUrl,
+          count: 0,
+          unreadCount: 0,
+          latestAt: n.createdAt,
+          notifications: [],
+        });
+      }
+      const sg = sourceMap.get(key)!;
+      sg.count++;
+      if (n.status === "new") sg.unreadCount++;
+      if (new Date(n.createdAt) > new Date(sg.latestAt)) sg.latestAt = n.createdAt;
+      sg.notifications.push(n);
+    }
+
+    // Sort notifications within each source group: unread first, then most recent.
+    for (const sg of sourceMap.values()) {
+      sg.notifications.sort((a, b) => {
+        if (a.status === b.status) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return a.status === "new" ? -1 : 1;
+      });
+    }
+
+    // Sort source groups: unread first, then most recent activity.
+    const sourceGroups = Array.from(sourceMap.values()).sort((a, b) => {
+      if (a.unreadCount > 0 !== b.unreadCount > 0) return a.unreadCount > 0 ? -1 : 1;
+      return new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime();
     });
+
+    const count = sourceGroups.reduce((s, sg) => s + sg.count, 0);
+    const unreadCount = sourceGroups.reduce((s, sg) => s + sg.unreadCount, 0);
+    groups.push({ notificationType, integration, count, unreadCount, sourceGroups });
   }
 
-  return Array.from(map.values());
+  return groups;
 }
 
 export function markGroupRead(developerId: string, notificationType: string): number {
@@ -225,6 +275,15 @@ export function markGroupRead(developerId: string, notificationType: string): nu
   return db.prepare(
     "UPDATE notifications SET status = 'read', read_at = datetime('now') WHERE developer_id = ? AND notification_type = ? AND status = 'new'",
   ).run(developerId, notificationType).changes;
+}
+
+export function markBatchRead(ids: string[]): number {
+  if (!ids.length) return 0;
+  const db = getDb();
+  const placeholders = ids.map(() => "?").join(",");
+  return db.prepare(
+    `UPDATE notifications SET status = 'read', read_at = datetime('now') WHERE id IN (${placeholders}) AND status = 'new'`,
+  ).run(...ids).changes;
 }
 
 export function getUnreadNotificationCount(developerId?: string): number {

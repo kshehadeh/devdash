@@ -8,9 +8,11 @@ import {
   groupedNotificationsForDeveloper,
   listNotificationsForDeveloper,
   markAllNotificationsRead,
+  markBatchRead,
   markGroupRead,
   markNotificationRead,
   setNotificationPreference,
+  type SourceItemKeyFn,
 } from "../db/notifications";
 import { getCurrentUserDeveloper } from "../db/developers";
 import { getConfig, setConfig } from "../db/config";
@@ -65,15 +67,27 @@ export function registerNotificationHandlers(getWindow: () => BrowserWindow | nu
   ipcMain.handle("notifications:list-grouped", () => {
     const devId = currentUserId();
     if (!devId) return { groups: [], totalUnreadCount: 0 };
-    const groups = groupedNotificationsForDeveloper(devId);
     const defs = getRegisteredNotificationDefinitions();
     const labelMap = new Map(defs.map((d) => [d.notificationType, d.label]));
+    const keyFnMap = new Map<string, SourceItemKeyFn>(
+      defs.map((d) => [d.notificationType, { sourceItemKey: d.sourceItemKey, sourceItemLabel: d.sourceItemLabel }]),
+    );
+    const groups = groupedNotificationsForDeveloper(devId, keyFnMap);
     const labeled = groups.map((g) => ({
       ...g,
       label: labelMap.get(g.notificationType) ?? g.notificationType,
     }));
     const totalUnreadCount = labeled.reduce((sum, g) => sum + g.unreadCount, 0);
     return { groups: labeled, totalUnreadCount };
+  });
+
+  ipcMain.handle("notifications:mark-batch-read", (_e, data: { ids: string[] }) => {
+    if (!Array.isArray(data?.ids)) throw new Error("Invalid ids payload");
+    const ids = data.ids.filter((id) => typeof id === "string");
+    const updated = markBatchRead(ids);
+    if (updated > 0) emitNotificationsChanged();
+    const devId = currentUserId();
+    return { success: true, updated, unreadCount: getUnreadNotificationCount(devId ?? undefined) };
   });
 
   ipcMain.handle("notifications:mark-group-read", (_e, data: { notificationType: string }) => {

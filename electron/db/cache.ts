@@ -345,7 +345,7 @@ export function getCachedConfluencePages(devId: string, spaceKeys?: string[], si
   }));
 }
 
-export function getCachedConfluenceActivity(devId: string, spaceKeys?: string[], site?: string): { type: "edit"; pageTitle: string; description: string; timeAgo: string; url?: string }[] | null {
+export function getCachedConfluenceActivity(devId: string, spaceKeys?: string[], site?: string): { type: "edit"; pageTitle: string; description: string; timeAgo: string; updatedAt: string; url?: string }[] | null {
   if (!hasFreshCache(devId, "confluence_pages")) return null;
   const db = getDb();
   const { sql: spaceSql, values: spaceValues } = spaceClause(spaceKeys);
@@ -358,6 +358,7 @@ export function getCachedConfluenceActivity(devId: string, spaceKeys?: string[],
     pageTitle: row.title,
     description: `Updated ${row.title}`,
     timeAgo: timeAgo(row.last_modified),
+    updatedAt: row.last_modified,
     url: site && row.space_key
       ? `https://${site}.atlassian.net/wiki/spaces/${row.space_key}/pages/${row.page_id}`
       : undefined,

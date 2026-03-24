@@ -89,6 +89,7 @@ export interface ConfluenceActivity {
   pageTitle: string;
   description: string;
   timeAgo: string;
+  updatedAt: string;
   url?: string;
 }
 
