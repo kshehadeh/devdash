@@ -17,6 +17,7 @@ import PullRequests from "./pages/reference/PullRequests";
 import Tickets from "./pages/reference/Tickets";
 import Documents from "./pages/reference/Documents";
 import Reviews from "./pages/Reviews";
+import NotificationsPage from "./pages/notifications/NotificationsPage";
 import Onboarding from "./pages/Onboarding";
 import { invoke } from "./lib/api";
 
@@ -82,6 +83,7 @@ function RoutedApp() {
       <Route element={<MainLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/reviews" element={<Reviews />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="connections" replace />} />
           <Route path="connections" element={<Connections />} />

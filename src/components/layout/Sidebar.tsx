@@ -1,13 +1,14 @@
 "use client";
 
 import { Link, useLocation } from "react-router-dom";
-import { ClipboardCheck, LayoutDashboard, Library, Settings } from "lucide-react";
+import { Bell, ClipboardCheck, LayoutDashboard, Library, Settings } from "lucide-react";
 import { clsx } from "clsx";
 import appIcon from "@/assets/icon-white.png";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/reviews", icon: ClipboardCheck, label: "Reviews" },
+  { href: "/notifications", icon: Bell, label: "Notifications" },
   { href: "/reference", icon: Library, label: "Reference" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];

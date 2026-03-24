@@ -85,6 +85,7 @@ export interface ConfluenceDoc {
 
 export interface ConfluenceActivity {
   type: "edit" | "comment";
+  pageTitle: string;
   description: string;
   timeAgo: string;
   url?: string;
@@ -278,4 +279,18 @@ export interface NotificationPreference {
 export interface NotificationsListResponse {
   notifications: NotificationRecord[];
   unreadCount: number;
+}
+
+export interface NotificationGroup {
+  notificationType: string;
+  integration: string;
+  label: string;
+  count: number;
+  unreadCount: number;
+  notifications: NotificationRecord[];
+}
+
+export interface NotificationsGroupedResponse {
+  groups: NotificationGroup[];
+  totalUnreadCount: number;
 }

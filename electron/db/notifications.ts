@@ -180,6 +180,53 @@ export function markAllNotificationsRead(developerId?: string): number {
   ).run().changes;
 }
 
+export interface NotificationGroup {
+  notificationType: string;
+  integration: string;
+  count: number;
+  unreadCount: number;
+  notifications: NotificationRecord[];
+}
+
+export function groupedNotificationsForDeveloper(developerId: string, limit = 200): NotificationGroup[] {
+  const db = getDb();
+  // Order only by date so group insertion order (and thus group order) is stable
+  // regardless of read/unread status changes.
+  const rows = db.prepare(
+    `SELECT * FROM notifications WHERE developer_id = ? ORDER BY datetime(created_at) DESC LIMIT ?`,
+  ).all(developerId, limit) as NotificationDbRow[];
+  const all = rows.map(mapRow);
+
+  const map = new Map<string, NotificationGroup>();
+  for (const n of all) {
+    const key = n.notificationType;
+    if (!map.has(key)) {
+      map.set(key, { notificationType: n.notificationType, integration: n.integration, count: 0, unreadCount: 0, notifications: [] });
+    }
+    const g = map.get(key)!;
+    g.count++;
+    if (n.status === "new") g.unreadCount++;
+    g.notifications.push(n);
+  }
+
+  // Sort within each group: unread first, then most recent.
+  for (const g of map.values()) {
+    g.notifications.sort((a, b) => {
+      if (a.status === b.status) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      return a.status === "new" ? -1 : 1;
+    });
+  }
+
+  return Array.from(map.values());
+}
+
+export function markGroupRead(developerId: string, notificationType: string): number {
+  const db = getDb();
+  return db.prepare(
+    "UPDATE notifications SET status = 'read', read_at = datetime('now') WHERE developer_id = ? AND notification_type = ? AND status = 'new'",
+  ).run(developerId, notificationType).changes;
+}
+
 export function getUnreadNotificationCount(developerId?: string): number {
   const db = getDb();
   const row = developerId

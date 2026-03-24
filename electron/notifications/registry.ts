@@ -39,8 +39,8 @@ const githubReviewRequested: NotificationDefinition = {
       .map((s) => ({ org: s.org, name: s.identifier }));
     const items = await fetchReviewRequests(conn.token, dev.githubUsername, repos.length ? repos : undefined, 20);
     return items.map((item) => ({
-      title: `Review requested: ${item.repo}#${item.number}`,
-      body: item.title,
+      title: item.title,
+      body: `${item.repo}#${item.number}`,
       sourceUrl: item.url,
       eventUpdatedAt: item.updatedAt,
       payload: {
@@ -77,8 +77,8 @@ const jiraUpdatedTickets: NotificationDefinition = {
       7,
     );
     return issues.map((issue) => ({
-      title: `Jira updated: ${issue.key}`,
-      body: issue.title,
+      title: issue.title,
+      body: issue.key,
       sourceUrl: issue.url,
       eventUpdatedAt: issue.updatedAt,
       payload: {
@@ -108,21 +108,21 @@ const confluencePageEdited: NotificationDefinition = {
       .map((s) => s.identifier);
     const items = await fetchConfluenceActivity(atConn.org, atConn.email, atConn.token, workEmail, spaces);
     return items.map((item) => ({
-      title: "Confluence activity",
-      body: item.description,
+      title: item.pageTitle,
+      body: "",
       sourceUrl: item.url,
       // API only provides relative label in this endpoint. Use now so repeating activity labels still dedupe by fingerprint strategy changes.
       eventUpdatedAt: new Date().toISOString(),
       payload: {
-        description: item.description,
+        pageTitle: item.pageTitle,
         timeAgo: item.timeAgo,
       },
     }));
   },
   fingerprint(event) {
-    const desc = typeof event.payload?.description === "string" ? event.payload.description : event.body;
+    const pageTitle = typeof event.payload?.pageTitle === "string" ? event.payload.pageTitle : event.title;
     const rel = typeof event.payload?.timeAgo === "string" ? event.payload.timeAgo : "";
-    return `${desc}:${rel}`;
+    return `${pageTitle}:${rel}`;
   },
 };
 

@@ -562,6 +562,7 @@ export async function fetchConfluenceActivity(
     const when = page.version?.when ?? page.history?.lastUpdated?.when ?? new Date().toISOString();
     return {
       type: "edit" as const,
+      pageTitle: page.title,
       description: `Updated ${page.title}`,
       timeAgo: timeAgo(when),
       url: `${baseUrl}/pages/${page.id}`,

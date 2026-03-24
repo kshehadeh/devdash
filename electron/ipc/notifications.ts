@@ -5,8 +5,10 @@ import {
   getNotificationById,
   getNotificationPreferences,
   getUnreadNotificationCount,
+  groupedNotificationsForDeveloper,
   listNotificationsForDeveloper,
   markAllNotificationsRead,
+  markGroupRead,
   markNotificationRead,
   setNotificationPreference,
 } from "../db/notifications";
@@ -58,6 +60,28 @@ export function registerNotificationHandlers(getWindow: () => BrowserWindow | nu
   ipcMain.handle("notifications:unread-count", () => {
     const devId = currentUserId();
     return { unreadCount: getUnreadNotificationCount(devId ?? undefined) };
+  });
+
+  ipcMain.handle("notifications:list-grouped", () => {
+    const devId = currentUserId();
+    if (!devId) return { groups: [], totalUnreadCount: 0 };
+    const groups = groupedNotificationsForDeveloper(devId);
+    const defs = getRegisteredNotificationDefinitions();
+    const labelMap = new Map(defs.map((d) => [d.notificationType, d.label]));
+    const labeled = groups.map((g) => ({
+      ...g,
+      label: labelMap.get(g.notificationType) ?? g.notificationType,
+    }));
+    const totalUnreadCount = labeled.reduce((sum, g) => sum + g.unreadCount, 0);
+    return { groups: labeled, totalUnreadCount };
+  });
+
+  ipcMain.handle("notifications:mark-group-read", (_e, data: { notificationType: string }) => {
+    const devId = currentUserId();
+    if (!devId || !data?.notificationType) return { success: true, updated: 0, unreadCount: 0 };
+    const updated = markGroupRead(devId, data.notificationType);
+    if (updated > 0) emitNotificationsChanged();
+    return { success: true, updated, unreadCount: getUnreadNotificationCount(devId) };
   });
 
   ipcMain.handle("notifications:preferences:get", () => {
