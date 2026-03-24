@@ -86,6 +86,7 @@ export interface ConfluenceDoc {
 
 export interface ConfluenceActivity {
   type: "edit" | "comment";
+  pageTitle: string;
   description: string;
   timeAgo: string;
   url?: string;
