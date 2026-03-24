@@ -14,7 +14,8 @@
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "migrate-smoke": "bun run electron:compile && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/migrate-smoke.cjs",
     "release": "bash scripts/version.sh",
-    "publish-release": "bun scripts/publish-release.ts"
+    "publish-release": "bun scripts/publish-release.ts",
+    "retag-release": "bun scripts/retag-release.ts"
   },
   "build": {
     "appId": "com.devdash.app",
