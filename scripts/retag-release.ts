@@ -52,6 +52,16 @@ function getTagCommit(tagName: string): string {
   return result.stdout.trim();
 }
 
+function getLatestMainCommit(): string {
+  // Fetch to make sure we have the latest remote state
+  execSync("git fetch origin main", { stdio: "inherit" });
+  const result = spawnSync("git", ["rev-parse", "origin/main"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`Could not resolve origin/main: ${result.stderr}`);
+  }
+  return result.stdout.trim();
+}
+
 function buildCandidates(drafts: Release[], allTags: string[]): Candidate[] {
   const draftTagNames = new Set(drafts.map((r) => r.tagName));
   const candidates: Candidate[] = [];
@@ -111,13 +121,13 @@ async function main() {
 
   let commit: string;
   try {
-    commit = getTagCommit(tag);
+    commit = getLatestMainCommit();
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
   }
 
-  console.log(`\nTag ${tag} points to commit ${commit}`);
+  console.log(`\nWill retag ${tag} on latest origin/main commit ${commit}`);
 
   const confirmMsg = selected.hasDraftRelease
     ? `Delete draft release + tag "${tag}", then re-push to retrigger the release workflow?`
