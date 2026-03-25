@@ -38,19 +38,24 @@ bun run build
 
 ### 3. Plan Atomic Commits
 
-Group the changes into the smallest meaningful commits. Each commit should:
-- Represent **one** logical change (a feature, a bug fix, a refactor, a chore, etc.)
-- Be independently reviewable and revertable
-- Not mix unrelated concerns (e.g., don't bundle a bug fix with a new feature)
+Group the changes by **feature-level units**, not implementation details. Each commit should:
+- Represent **one complete feature, bug fix, or refactor** from a user/product perspective
+- Include all necessary layers: backend (database, IPC, logic) + frontend (UI, types, integration)
+- Be independently deployable and testable
+- Not mix unrelated features or concerns
+
+**Prefer feature-complete commits over layer-by-layer commits.** For example:
+- ✅ `feat(reminders): add reminders system with notifications and macOS sync`
+- ❌ `feat(reminders): add database schema` → `feat(reminders): add IPC handlers` → `feat(reminders): add UI components` (too granular)
 
 Common groupings to consider:
-- New feature additions together
-- Bug fixes together (or separately if unrelated)
-- Dependency/config changes separate from app logic
-- Refactors separate from behavior changes
-- Test-only changes separate from implementation
+- **Complete feature**: All code for one user-facing capability (backend + frontend)
+- **Bug fix**: Fix for a specific issue including all affected layers
+- **Refactor**: Refactoring that touches multiple files but achieves one coherent improvement
+- **Config/tooling**: Dependency updates, build config, or tooling changes
+- **Unrelated fixes**: If working on multiple unrelated features, commit them separately
 
-If all changes clearly belong to one unit of work, a single commit is fine.
+If all changes clearly belong to one feature or fix, a single commit is fine and preferred.
 
 ### 4. Write Conventional Commit Messages
 
@@ -83,10 +88,20 @@ Each commit message must follow the [Conventional Commits](https://www.conventio
 
 **Examples:**
 ```
-feat(settings): add development settings section with devtools toggle
-fix(cache): include github_pr_review_comments in cache bucket defs
-refactor(sidebar): remove reference tab and related routes
-chore: update tsconfig paths for new skill directory
+feat(reminders): add reminders feature with notifications and macOS sync
+fix(notifications): resolve unread count badge not updating on mark-read
+refactor(settings): consolidate integration settings into unified config
+chore(deps): upgrade electron to v28 and fix breaking changes
+```
+
+**Multi-line example for complex features:**
+```
+feat(reminders): add reminders system with scheduling and notifications
+
+- Add reminder scheduling with snooze/dismiss actions
+- Integrate with notifications list and dashboard
+- Support macOS Reminders sync via AppleScript
+- Add settings toggle for platform integration
 ```
 
 ### 5. Stage and Commit
