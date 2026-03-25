@@ -14,6 +14,9 @@ export default function General() {
   const [checkBusy, setCheckBusy] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const [toggleBusy, setToggleBusy] = useState(false);
+  const [syncToMacOS, setSyncToMacOS] = useState(false);
+  const [macOSAvailable, setMacOSAvailable] = useState(false);
+  const [macOSLoading, setMacOSLoading] = useState(true);
 
   const loadPref = useCallback(async () => {
     try {
@@ -26,9 +29,22 @@ export default function General() {
     }
   }, []);
 
+  const loadMacOSConfig = useCallback(async () => {
+    try {
+      const res = await invoke<{ syncToMacOS: boolean; macOSAvailable: boolean }>("reminders:config:get");
+      setSyncToMacOS(res.syncToMacOS);
+      setMacOSAvailable(res.macOSAvailable);
+    } catch {
+      setMacOSAvailable(false);
+    } finally {
+      setMacOSLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadPref();
-  }, [loadPref]);
+    void loadMacOSConfig();
+  }, [loadPref, loadMacOSConfig]);
 
   const onToggleAutoUpdate = async (checked: boolean) => {
     setToggleBusy(true);
@@ -66,6 +82,16 @@ export default function General() {
       setCheckMessage(e instanceof Error ? e.message : "Update check failed.");
     } finally {
       setCheckBusy(false);
+    }
+  };
+
+  const onToggleMacOSSync = async (checked: boolean) => {
+    const prev = syncToMacOS;
+    setSyncToMacOS(checked);
+    try {
+      await invoke("reminders:config:set", { syncToMacOS: checked });
+    } catch {
+      setSyncToMacOS(prev);
     }
   };
 
@@ -112,6 +138,33 @@ export default function General() {
             <p className="text-xs font-label text-[var(--on-surface-variant)] mt-3">{checkMessage}</p>
           )}
         </Card>
+
+        {macOSAvailable && !macOSLoading && (
+          <Card>
+            <div className="flex items-center gap-2 min-w-0 mb-3">
+              <SlidersHorizontal size={18} className="text-[var(--on-surface)] shrink-0" />
+              <h3 className="text-base font-semibold text-[var(--on-surface)]">Reminders</h3>
+            </div>
+            <p className="text-xs font-label text-[var(--on-surface-variant)] mb-4">
+              Integrate DevDash reminders with the macOS Reminders app for system-wide notifications.
+            </p>
+
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="mt-0.5 rounded border-[var(--outline-variant)]"
+                checked={syncToMacOS}
+                onChange={(e) => void onToggleMacOSSync(e.target.checked)}
+              />
+              <span className="text-sm text-[var(--on-surface)]">
+                Sync triggered reminders to macOS Reminders
+                <span className="block text-xs font-label text-[var(--on-surface-variant)] mt-0.5">
+                  When a reminder triggers in DevDash, it will also be created in your macOS Reminders app in a "DevDash" list.
+                </span>
+              </span>
+            </label>
+          </Card>
+        )}
       </div>
     </div>
   );
