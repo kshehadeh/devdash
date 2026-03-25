@@ -41,12 +41,17 @@ export function SourceFormDialog({
 
   const [jiraProjects, setJiraProjects] = useState<ComboboxOption[]>([]);
   const [jiraProjectsLoading, setJiraProjectsLoading] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [existingProjectKeys, setExistingProjectKeys] = useState<Set<string>>(new Set());
   const [availableBoards, setAvailableBoards] = useState<{ id: number; name: string; type: string }[]>([]);
   const [boardsLoading, setBoardsLoading] = useState(false);
 
   const [confluenceSpaces, setConfluenceSpaces] = useState<ComboboxOption[]>([]);
-  const [confluenceSearching, setConfluenceSearching] = useState(false);
-  const [confluenceSearchMatchKeys, setConfluenceSearchMatchKeys] = useState<Set<string>>(() => new Set());
+  const [confluenceSpacesLoading, setConfluenceSpacesLoading] = useState(false);
+  const [selectedSpaces, setSelectedSpaces] = useState<string[]>([]);
+  const [spaceSearchQuery, setSpaceSearchQuery] = useState("");
+  const [existingSpaceKeys, setExistingSpaceKeys] = useState<Set<string>>(new Set());
 
   const [linearTeams, setLinearTeams] = useState<ComboboxOption[]>([]);
   const [linearTeamsLoading, setLinearTeamsLoading] = useState(false);
@@ -105,13 +110,18 @@ export function SourceFormDialog({
   useEffect(() => {
     if (sourceType !== "jira_project") return;
     setJiraProjectsLoading(true);
-    invoke<{ key: string; name: string; type: string }[]>("discover:jira:projects")
-      .then((data) => {
+    Promise.all([
+      invoke<{ key: string; name: string; type: string }[]>("discover:jira:projects"),
+      !isEdit ? invoke<DataSource[]>("sources:list", { type: "jira_project" }) : Promise.resolve([]),
+    ])
+      .then(([data, existingSources]) => {
+        const existingKeys = new Set(existingSources.map((s) => s.identifier));
+        setExistingProjectKeys(existingKeys);
         setJiraProjects(data.map((p) => ({ value: p.key, label: `${p.key} — ${p.name}`, description: p.type })));
       })
       .catch(() => {})
       .finally(() => setJiraProjectsLoading(false));
-  }, [sourceType]);
+  }, [sourceType, isEdit]);
 
   useEffect(() => {
     if (sourceType !== "jira_project" || !identifier) {
@@ -146,46 +156,21 @@ export function SourceFormDialog({
 
   useEffect(() => {
     if (sourceType !== "confluence_space") return;
-    setConfluenceSearchMatchKeys(new Set());
-    if (isEdit && existing?.identifier) {
-      setConfluenceSpaces([
-        {
-          value: existing.identifier,
-          label: existing.name?.trim() || existing.identifier,
-          description: existing.identifier,
-        },
-      ]);
-    } else {
-      setConfluenceSpaces([]);
-    }
-  }, [sourceType, isEdit, existing?.id, existing?.identifier, existing?.name]);
-
-  function handleConfluenceSearch(query: string) {
-    if (!query) {
-      setConfluenceSearchMatchKeys(new Set());
-      setConfluenceSearching(false);
-      return;
-    }
-    setConfluenceSearching(true);
-    invoke<{ key: string; name: string }[]>("discover:confluence:spaces", { q: query })
-      .then((data) => {
-        setConfluenceSearchMatchKeys(new Set(data.map((s) => s.key)));
-        const additions = data.map((s) => ({ value: s.key, label: s.name, description: s.key }));
-        setConfluenceSpaces((prev) => {
-          const seen = new Set(prev.map((o) => o.value));
-          const merged = [...prev];
-          for (const o of additions) {
-            if (!seen.has(o.value)) {
-              seen.add(o.value);
-              merged.push(o);
-            }
-          }
-          return merged;
-        });
+    setConfluenceSpacesLoading(true);
+    Promise.all([
+      invoke<{ key: string; name: string; type: string }[]>("discover:confluence:spaces"),
+      !isEdit ? invoke<DataSource[]>("sources:list", { type: "confluence_space" }) : Promise.resolve([]),
+    ])
+      .then(([spaces, existingSources]) => {
+        const existingKeys = new Set(existingSources.map((s) => s.identifier));
+        setExistingSpaceKeys(existingKeys);
+        setConfluenceSpaces(
+          spaces.map((s) => ({ value: s.key, label: s.name, description: s.key })),
+        );
       })
       .catch(() => {})
-      .finally(() => setConfluenceSearching(false));
-  }
+      .finally(() => setConfluenceSpacesLoading(false));
+  }, [sourceType, isEdit]);
 
   function handleRepoSelect(repoName: string) {
     setIdentifier(repoName);
@@ -221,10 +206,38 @@ export function SourceFormDialog({
     setBoards([]);
   }
 
+  function toggleProject(projectKey: string) {
+    setSelectedProjects((prev) => {
+      const exists = prev.includes(projectKey);
+      const newProjects = exists ? prev.filter((k) => k !== projectKey) : [...prev, projectKey];
+
+      if (newProjects.length === 1 && !name) {
+        const proj = jiraProjects.find((p) => p.value === newProjects[0]);
+        if (proj) setName(proj.label.split(" — ")[1] ?? newProjects[0]);
+      }
+
+      return newProjects;
+    });
+  }
+
   function handleSpaceSelect(spaceKey: string) {
     setIdentifier(spaceKey);
     const space = confluenceSpaces.find((s) => s.value === spaceKey);
     if (space && !name) setName(space.label);
+  }
+
+  function toggleSpace(spaceKey: string) {
+    setSelectedSpaces((prev) => {
+      const exists = prev.includes(spaceKey);
+      const newSpaces = exists ? prev.filter((k) => k !== spaceKey) : [...prev, spaceKey];
+
+      if (newSpaces.length === 1 && !name) {
+        const space = confluenceSpaces.find((s) => s.value === newSpaces[0]);
+        if (space) setName(space.label);
+      }
+
+      return newSpaces;
+    });
   }
 
   function handleLinearTeamSelect(teamId: string) {
@@ -268,6 +281,29 @@ export function SourceFormDialog({
               name: selectedRepos.length === 1 && name.trim() ? name.trim() : repoName,
               org: org.trim(),
               identifier: repoName,
+            });
+          }
+        } else if (sourceType === "jira_project" && selectedProjects.length > 0) {
+          const uniqueProjects = [...new Set(selectedProjects)].filter((k) => !existingProjectKeys.has(k));
+          for (const projectKey of uniqueProjects) {
+            const proj = jiraProjects.find((p) => p.value === projectKey);
+            const projectName = proj?.label.split(" — ")[1] ?? projectKey;
+            await invoke("sources:create", {
+              type: sourceType,
+              name: uniqueProjects.length === 1 && name.trim() ? name.trim() : projectName,
+              org: org.trim(),
+              identifier: projectKey,
+            });
+          }
+        } else if (sourceType === "confluence_space" && selectedSpaces.length > 0) {
+          const uniqueSpaces = [...new Set(selectedSpaces)].filter((k) => !existingSpaceKeys.has(k));
+          for (const spaceKey of uniqueSpaces) {
+            const space = confluenceSpaces.find((s) => s.value === spaceKey);
+            await invoke("sources:create", {
+              type: sourceType,
+              name: uniqueSpaces.length === 1 && name.trim() ? name.trim() : (space?.label ?? spaceKey),
+              org: org.trim(),
+              identifier: spaceKey,
             });
           }
         } else {
@@ -387,56 +423,123 @@ export function SourceFormDialog({
         )}
 
         {sourceType === "jira_project" && (
-          <>
-            <Combobox
-              label="Project"
-              options={jiraProjects}
-              value={identifier}
-              onChange={handleProjectSelect}
-              placeholder="Select a Jira project..."
-              loading={jiraProjectsLoading}
-            />
+          isEdit ? (
+            <>
+              <Combobox
+                label="Project"
+                options={jiraProjects}
+                value={identifier}
+                onChange={handleProjectSelect}
+                placeholder="Select a Jira project..."
+                loading={jiraProjectsLoading}
+              />
 
-            {identifier && (
-              <div>
-                <label className="block text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-1.5">
-                  Boards
+              {identifier && (
+                <div>
+                  <label className="block text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-1.5">
+                    Boards
+                  </label>
+                  {boardsLoading ? (
+                    <div className="flex items-center gap-2 py-3 text-xs text-[var(--on-surface-variant)]">
+                      <Loader2 size={14} className="animate-spin" />
+                      Loading boards...
+                    </div>
+                  ) : availableBoards.length === 0 ? (
+                    <p className="text-xs text-[var(--on-surface-variant)] py-2">
+                      No boards found for this project.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                      {availableBoards.map((board) => {
+                        const checked = boards.some((b) => b.id === board.id);
+                        return (
+                          <label
+                            key={board.id}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleBoard(board)}
+                              className="accent-[var(--primary)] w-3.5 h-3.5"
+                            />
+                            <Kanban size={13} className="text-[var(--on-surface-variant)] shrink-0" />
+                            <span className="text-sm text-[var(--on-surface)] flex-1 truncate">{board.name}</span>
+                            <span className="text-[10px] text-[var(--on-surface-variant)] font-label">{board.type}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                  Projects
                 </label>
-                {boardsLoading ? (
-                  <div className="flex items-center gap-2 py-3 text-xs text-[var(--on-surface-variant)]">
-                    <Loader2 size={14} className="animate-spin" />
-                    Loading boards...
-                  </div>
-                ) : availableBoards.length === 0 ? (
-                  <p className="text-xs text-[var(--on-surface-variant)] py-2">
-                    No boards found for this project.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
-                    {availableBoards.map((board) => {
-                      const checked = boards.some((b) => b.id === board.id);
-                      return (
-                        <label
-                          key={board.id}
-                          className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleBoard(board)}
-                            className="accent-[var(--primary)] w-3.5 h-3.5"
-                          />
-                          <Kanban size={13} className="text-[var(--on-surface-variant)] shrink-0" />
-                          <span className="text-sm text-[var(--on-surface)] flex-1 truncate">{board.name}</span>
-                          <span className="text-[10px] text-[var(--on-surface-variant)] font-label">{board.type}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                {selectedProjects.length > 0 && (
+                  <span className="text-xs font-label text-[var(--primary)]">
+                    {selectedProjects.length} selected
+                  </span>
                 )}
               </div>
-            )}
-          </>
+              {jiraProjectsLoading ? (
+                <div className="flex items-center gap-2 py-3 text-xs text-[var(--on-surface-variant)]">
+                  <Loader2 size={14} className="animate-spin" />
+                  Loading projects...
+                </div>
+              ) : jiraProjects.length === 0 ? (
+                <p className="text-xs text-[var(--on-surface-variant)] py-2">
+                  No projects found
+                </p>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={projectSearchQuery}
+                    onChange={(e) => setProjectSearchQuery(e.target.value)}
+                    placeholder="Search projects..."
+                    className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 mb-2 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)]"
+                  />
+                  <div className="flex flex-col gap-1 max-h-64 overflow-y-auto border border-[var(--outline-variant)]/20 rounded-md p-1">
+                    {jiraProjects
+                      .filter((proj) => !existingProjectKeys.has(proj.value))
+                      .filter((proj) =>
+                        projectSearchQuery.trim()
+                          ? proj.label.toLowerCase().includes(projectSearchQuery.toLowerCase()) ||
+                            proj.description?.toLowerCase().includes(projectSearchQuery.toLowerCase())
+                          : true
+                      )
+                      .map((proj) => {
+                        const checked = selectedProjects.includes(proj.value);
+                        return (
+                          <label
+                            key={proj.value}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleProject(proj.value)}
+                              className="accent-[var(--primary)] w-3.5 h-3.5 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-[var(--on-surface)] truncate">{proj.label}</div>
+                              {proj.description && (
+                                <div className="text-xs text-[var(--on-surface-variant)] truncate">{proj.description}</div>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                  </div>
+                </>
+              )}
+            </div>
+          )
         )}
 
         {sourceType === "linear_team" && (
@@ -451,23 +554,86 @@ export function SourceFormDialog({
         )}
 
         {sourceType === "confluence_space" && (
-          <Combobox
-            label="Space"
-            options={confluenceSpaces}
-            value={identifier}
-            onChange={handleSpaceSelect}
-            onSearch={handleConfluenceSearch}
-            onSearchInput={() => setConfluenceSearchMatchKeys(new Set())}
-            searchMatchKeys={confluenceSearchMatchKeys}
-            placeholder="Search for a Confluence space..."
-            searchPlaceholder="Type to search spaces..."
-            emptyBrowseHint="Type to search Confluence. Spaces you load stay in this list until you close the dialog."
-            minSearchLength={1}
-            searchLoading={confluenceSearching}
-          />
+          isEdit ? (
+            <Combobox
+              label="Space"
+              options={confluenceSpaces}
+              value={identifier}
+              onChange={handleSpaceSelect}
+              placeholder="Select a Confluence space..."
+              loading={confluenceSpacesLoading}
+            />
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                  Spaces
+                </label>
+                {selectedSpaces.length > 0 && (
+                  <span className="text-xs font-label text-[var(--primary)]">
+                    {selectedSpaces.length} selected
+                  </span>
+                )}
+              </div>
+              {confluenceSpacesLoading ? (
+                <div className="flex items-center gap-2 py-3 text-xs text-[var(--on-surface-variant)]">
+                  <Loader2 size={14} className="animate-spin" />
+                  Loading spaces...
+                </div>
+              ) : confluenceSpaces.length === 0 ? (
+                <p className="text-xs text-[var(--on-surface-variant)] py-2">
+                  No spaces found. Spaces will appear after the first sync completes.
+                </p>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={spaceSearchQuery}
+                    onChange={(e) => setSpaceSearchQuery(e.target.value)}
+                    placeholder="Search spaces..."
+                    className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 mb-2 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)]"
+                  />
+                  <div className="flex flex-col gap-1 max-h-64 overflow-y-auto border border-[var(--outline-variant)]/20 rounded-md p-1">
+                    {confluenceSpaces
+                      .filter((space) => !existingSpaceKeys.has(space.value))
+                      .filter((space) =>
+                        spaceSearchQuery.trim()
+                          ? space.label.toLowerCase().includes(spaceSearchQuery.toLowerCase()) ||
+                            space.description?.toLowerCase().includes(spaceSearchQuery.toLowerCase())
+                          : true
+                      )
+                      .map((space) => {
+                        const checked = selectedSpaces.includes(space.value);
+                        return (
+                          <label
+                            key={space.value}
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleSpace(space.value)}
+                              className="accent-[var(--primary)] w-3.5 h-3.5 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-[var(--on-surface)] truncate">{space.label}</div>
+                              {space.description && (
+                                <div className="text-xs text-[var(--on-surface-variant)] truncate">{space.description}</div>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                  </div>
+                </>
+              )}
+            </div>
+          )
         )}
 
-        {!(sourceType === "github_repo" && !isEdit && selectedRepos.length > 1) && (
+        {!(sourceType === "github_repo" && !isEdit && selectedRepos.length > 1) &&
+         !(sourceType === "jira_project" && !isEdit && selectedProjects.length > 1) &&
+         !(sourceType === "confluence_space" && !isEdit && selectedSpaces.length > 1) && (
           <div>
             <label className="block text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-1.5">
               Display Name
@@ -496,7 +662,11 @@ export function SourceFormDialog({
               saving ||
               (sourceType === "github_repo" && !isEdit
                 ? selectedRepos.length === 0
-                : !identifier)
+                : sourceType === "jira_project" && !isEdit
+                  ? selectedProjects.length === 0
+                  : sourceType === "confluence_space" && !isEdit
+                    ? selectedSpaces.length === 0
+                    : !identifier)
             }
             className="px-4 py-2 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-container)] text-[var(--on-primary)] text-sm font-semibold rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
@@ -506,7 +676,11 @@ export function SourceFormDialog({
                 ? "Save Changes"
                 : sourceType === "github_repo" && selectedRepos.length > 1
                   ? `Add ${selectedRepos.length} Repositories`
-                  : "Add"}
+                  : sourceType === "jira_project" && selectedProjects.length > 1
+                    ? `Add ${selectedProjects.length} Projects`
+                    : sourceType === "confluence_space" && selectedSpaces.length > 1
+                      ? `Add ${selectedSpaces.length} Spaces`
+                      : "Add"}
           </button>
           <button
             type="button"
