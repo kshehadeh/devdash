@@ -9,6 +9,7 @@ import { PRCommentBarChart } from "@/components/dashboard/PRCommentBarChart";
 import { PullRequestList } from "@/components/dashboard/PullRequestList";
 import { ConfluenceSection } from "@/components/dashboard/ConfluenceSection";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
+import { TriggeredRemindersBanner } from "@/components/reminders/TriggeredRemindersBanner";
 import { invoke, useIpc } from "@/lib/api";
 import { useAppStatus } from "@/context/AppStatusContext";
 import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
@@ -168,6 +169,10 @@ export default function DashboardPage() {
               ticketsLoading={tickets.loading}
               confluenceLoading={confluence.loading}
             />
+
+            <div className="mt-6">
+              <TriggeredRemindersBanner />
+            </div>
 
             <div className="mt-6 flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">

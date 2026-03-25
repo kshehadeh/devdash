@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Bell, ChevronDown, ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, ExternalLink, RefreshCw, AlarmClock } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
+import { ReminderDialog } from "@/components/reminders/ReminderDialog";
 import type { NotificationGroup, NotificationRecord, NotificationSourceGroup, NotificationsGroupedResponse } from "@/lib/types";
 
 function formatWhen(iso: string): string {
@@ -55,6 +56,8 @@ export default function NotificationsPage() {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const contentRef = useRef<HTMLDivElement>(null);
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [reminderForNotification, setReminderForNotification] = useState<NotificationRecord | null>(null);
 
   const groupParam = searchParams.get("group");
 
@@ -155,6 +158,11 @@ export default function NotificationsPage() {
     await invoke("notifications:mark-read", { id });
     if (sourceUrl) window.open(sourceUrl);
     void load();
+  }
+
+  function openReminderDialog(notification: NotificationRecord) {
+    setReminderForNotification(notification);
+    setReminderDialogOpen(true);
   }
 
   return (
@@ -346,13 +354,15 @@ export default function NotificationsPage() {
                                 {sg.notifications.map((n) => {
                                   const subtext = getNotificationSubtext(n);
                                   return (
-                                    <button
+                                    <div
                                       key={n.id}
-                                      onClick={() => void openNotification(n.id, n.sourceUrl)}
-                                      className="w-full text-left px-6 py-2.5 hover:bg-[var(--surface-container-low)] transition-colors flex items-start gap-3"
+                                      className="w-full text-left px-6 py-2.5 hover:bg-[var(--surface-container-low)] transition-colors flex items-start gap-3 group"
                                     >
                                       <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full block" style={{ backgroundColor: n.status === "new" ? "var(--primary)" : "transparent", border: n.status !== "new" ? "1px solid var(--outline-variant)" : "none" }} />
-                                      <div className="flex-1 min-w-0">
+                                      <button
+                                        onClick={() => void openNotification(n.id, n.sourceUrl)}
+                                        className="flex-1 min-w-0 text-left"
+                                      >
                                         <div className="flex items-center justify-between gap-2">
                                           <p className="text-xs text-[var(--on-surface)] truncate">{n.title}</p>
                                           {n.sourceUrl && (
@@ -365,8 +375,15 @@ export default function NotificationsPage() {
                                         <p className="text-[10px] font-label text-[var(--on-surface-variant)]/60 mt-1">
                                           {formatWhen(n.createdAt)}
                                         </p>
-                                      </div>
-                                    </button>
+                                      </button>
+                                      <button
+                                        onClick={() => openReminderDialog(n)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-1 hover:bg-[var(--surface-container)] rounded"
+                                        title="Set reminder"
+                                      >
+                                        <AlarmClock size={12} className="text-[var(--on-surface-variant)]" />
+                                      </button>
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -383,6 +400,22 @@ export default function NotificationsPage() {
           )}
         </div>
       </div>
+
+      {reminderDialogOpen && reminderForNotification && (
+        <ReminderDialog
+          notificationId={reminderForNotification.id}
+          initialTitle={reminderForNotification.title}
+          initialSourceUrl={reminderForNotification.sourceUrl || undefined}
+          onClose={() => {
+            setReminderDialogOpen(false);
+            setReminderForNotification(null);
+          }}
+          onSave={() => {
+            setReminderDialogOpen(false);
+            setReminderForNotification(null);
+          }}
+        />
+      )}
     </div>
   );
 }
