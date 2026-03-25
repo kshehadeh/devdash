@@ -385,6 +385,78 @@ export async function syncConfluencePages(developerId: string): Promise<void> {
   }
 }
 
+// ---------- Confluence Space List Sync (org-level) ----------
+
+export async function syncConfluenceSpaceList(): Promise<void> {
+  const conn = getConnection("atlassian");
+  if (!conn?.connected || !conn.token || !conn.email || !conn.org) return;
+
+  const org = conn.org;
+  const db = getDb();
+  const hdrs = atlHeaders(conn.email, conn.token);
+  const baseUrl = `https://${org}.atlassian.net/wiki`;
+
+  try {
+    const allSpaces: { key: string; name: string; type: string }[] = [];
+    let start = 0;
+    const limit = 100;
+    const maxPages = 40;
+
+    for (let page = 0; page < maxPages; page++) {
+      const res = await fetch(`${baseUrl}/rest/api/space?limit=${limit}&start=${start}`, { headers: hdrs });
+      if (!res.ok) {
+        console.error("[SyncConfluenceSpaces] list failed:", res.status, await res.text().catch(() => ""));
+        return;
+      }
+      const d = await res.json();
+      const batch = d.results ?? [];
+      for (const s of batch) {
+        if (s?.key) allSpaces.push({ key: s.key, name: s.name ?? s.key, type: s.type ?? "global" });
+      }
+      if (batch.length < limit) break;
+      start += batch.length;
+    }
+
+    const upsert = db.prepare(`
+      INSERT INTO cached_confluence_spaces (org, space_key, space_name, space_type, updated_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(org, space_key) DO UPDATE SET
+        space_name = excluded.space_name, space_type = excluded.space_type, updated_at = excluded.updated_at
+    `);
+
+    db.transaction(() => {
+      for (const s of allSpaces) {
+        upsert.run(org, s.key, s.name, s.type);
+      }
+      // Reconcile: remove spaces no longer in Confluence
+      const liveKeys = new Set(allSpaces.map((s) => s.key));
+      const cached = db.prepare("SELECT space_key FROM cached_confluence_spaces WHERE org = ?").all(org) as { space_key: string }[];
+      const toDelete = cached.filter((r) => !liveKeys.has(r.space_key)).map((r) => r.space_key);
+      if (toDelete.length > 0) {
+        const placeholders = toDelete.map(() => "?").join(", ");
+        db.prepare(`DELETE FROM cached_confluence_spaces WHERE org = ? AND space_key IN (${placeholders})`).run(org, ...toDelete);
+      }
+    })();
+
+    console.log(`[SyncConfluenceSpaces] Cached ${allSpaces.length} spaces for org ${org}`);
+  } catch (err) {
+    console.error("[SyncConfluenceSpaces] Error:", err);
+  }
+}
+
+export function getCachedConfluenceSpaces(org: string, query: string): { key: string; name: string; type: string }[] {
+  const db = getDb();
+  if (!query) {
+    return db.prepare(
+      "SELECT space_key as key, space_name as name, space_type as type FROM cached_confluence_spaces WHERE org = ? ORDER BY space_name ASC",
+    ).all(org) as { key: string; name: string; type: string }[];
+  }
+  const pattern = `%${query}%`;
+  return db.prepare(
+    "SELECT space_key as key, space_name as name, space_type as type FROM cached_confluence_spaces WHERE org = ? AND (space_key LIKE ? COLLATE NOCASE OR space_name LIKE ? COLLATE NOCASE) ORDER BY space_name ASC",
+  ).all(org, pattern, pattern) as { key: string; name: string; type: string }[];
+}
+
 // ---------- Helpers ----------
 
 function setSyncStatus(

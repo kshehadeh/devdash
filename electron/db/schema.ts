@@ -342,6 +342,17 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_cached_pr_review_comments_dev_created
     ON cached_pr_review_comments(developer_id, created_at);
   `,
+  // v17 — cached Confluence space list (org-level, not per-developer)
+  `
+  CREATE TABLE IF NOT EXISTS cached_confluence_spaces (
+    org TEXT NOT NULL,
+    space_key TEXT NOT NULL,
+    space_name TEXT NOT NULL,
+    space_type TEXT NOT NULL DEFAULT 'global',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (org, space_key)
+  );
+  `,
 ];
 
 

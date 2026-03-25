@@ -1,5 +1,6 @@
 import { getDb } from "../db/index";
 import { getRegisteredSyncTasks } from "../integrations/sync-registry";
+import { syncConfluenceSpaceList } from "./atlassian-sync";
 import { broadcastSyncProgress, type SyncProgressPayload } from "./progress-broadcast";
 
 let _syncing = false;
@@ -144,6 +145,11 @@ export async function syncAll(): Promise<void> {
     }
 
     console.log(`[Sync] Starting sync for ${devs.length} developer(s)`);
+
+    // Org-level syncs (run once, not per-developer)
+    await syncConfluenceSpaceList().catch((err) =>
+      console.error("[Sync] Confluence space list sync error:", err),
+    );
 
     for (let i = 0; i < devs.length; i++) {
       await syncDeveloper(devs[i].id, {
