@@ -353,6 +353,26 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (org, space_key)
   );
   `,
+  // v18 — reminders table
+  `
+  CREATE TABLE IF NOT EXISTS reminders (
+    id TEXT PRIMARY KEY,
+    developer_id TEXT NOT NULL,
+    notification_id TEXT,
+    title TEXT NOT NULL,
+    comment TEXT NOT NULL DEFAULT '',
+    source_url TEXT,
+    remind_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'triggered', 'dismissed', 'snoozed')),
+    snoozed_until TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE,
+    FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_reminders_status_remind_at ON reminders(status, remind_at);
+  CREATE INDEX IF NOT EXISTS idx_reminders_dev_status ON reminders(developer_id, status);
+  `,
 ];
 
 
