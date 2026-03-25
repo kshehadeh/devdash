@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Settings2 } from "lucide-react";
+import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Settings2, Edit2, BellOff, X } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
 import type { ReminderRecord, RemindersListResponse, ReminderStatus } from "@/lib/types";
@@ -46,7 +46,7 @@ function statusBadgeClass(status: ReminderStatus): string {
 export default function RemindersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
-  const [reminders, setReminders] = useState<ReminderRecord[]>([]);
+  const [allReminders, setAllReminders] = useState<ReminderRecord[]>([]);
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<ReminderRecord | null>(null);
@@ -60,27 +60,37 @@ export default function RemindersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const opts = filter !== "all" ? { status: filter } : undefined;
-      const res = await invoke<RemindersListResponse>("reminders:list", opts);
+      // Always fetch all reminders (no filter)
+      const res = await invoke<RemindersListResponse>("reminders:list");
       
-      // Sort reminders based on filter
-      let sorted = [...res.reminders];
-      if (filter === "all") {
-        // For "all", sort by: triggered first, then pending/snoozed by remind_at ascending
-        sorted.sort((a, b) => {
-          if (a.status === "triggered" && b.status !== "triggered") return -1;
-          if (a.status !== "triggered" && b.status === "triggered") return 1;
-          return new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime();
-        });
-      }
+      // Sort reminders: triggered > undismissed untriggered > dismissed, then by remind_at ascending
+      const sorted = [...res.reminders].sort((a, b) => {
+        // Priority order: triggered (3), pending/snoozed (2), dismissed (1)
+        const getPriority = (status: ReminderStatus) => {
+          if (status === "triggered") return 3;
+          if (status === "dismissed") return 1;
+          return 2; // pending or snoozed
+        };
+        
+        const priorityA = getPriority(a.status);
+        const priorityB = getPriority(b.status);
+        
+        // Sort by priority first (higher priority first)
+        if (priorityA !== priorityB) {
+          return priorityB - priorityA;
+        }
+        
+        // Within same priority, sort by remind_at ascending (earliest first)
+        return new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime();
+      });
       
-      setReminders(sorted);
+      setAllReminders(sorted);
     } catch {
-      setReminders([]);
+      setAllReminders([]);
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, []);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -112,14 +122,14 @@ export default function RemindersPage() {
 
   useEffect(() => {
     const unsub = window.electron.onReminderNavigate(({ id }) => {
-      const reminder = reminders.find((r) => r.id === id);
+      const reminder = allReminders.find((r) => r.id === id);
       if (reminder) {
         setFilter("triggered");
         setSearchParams({ status: "triggered" });
       }
     });
     return unsub;
-  }, [reminders, setSearchParams]);
+  }, [allReminders, setSearchParams]);
 
   function openCreateDialog() {
     setEditingReminder(null);
@@ -148,7 +158,28 @@ export default function RemindersPage() {
     await invoke("reminders:config:set", { syncToMacOS: newValue });
   }
 
-  const filteredReminders = reminders;
+  // Filter reminders on the frontend
+  const filteredReminders = (() => {
+    if (filter === "all") {
+      // For "all", exclude dismissed reminders older than 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return allReminders.filter(
+        (r) => r.status !== "dismissed" || new Date(r.updatedAt) >= thirtyDaysAgo
+      );
+    }
+    
+    if (filter === "dismissed") {
+      // For dismissed filter, only show last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return allReminders.filter(
+        (r) => r.status === "dismissed" && new Date(r.updatedAt) >= thirtyDaysAgo
+      );
+    }
+    
+    return allReminders.filter((r) => r.status === filter);
+  })();
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -200,7 +231,28 @@ export default function RemindersPage() {
         <nav className="w-56 shrink-0 bg-[var(--surface-container-low)] border-r border-[var(--outline-variant)]/20 py-3 flex flex-col gap-0.5 overflow-y-auto">
           {(["all", "pending", "triggered", "snoozed", "dismissed"] as const).map((status) => {
             const isActive = filter === status;
-            const count = status === "all" ? reminders.length : reminders.filter((r) => r.status === status).length;
+            
+            // Calculate count based on the same filtering logic
+            const count = (() => {
+              if (status === "all") {
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                return allReminders.filter(
+                  (r) => r.status !== "dismissed" || new Date(r.updatedAt) >= thirtyDaysAgo
+                ).length;
+              }
+              
+              if (status === "dismissed") {
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                return allReminders.filter(
+                  (r) => r.status === "dismissed" && new Date(r.updatedAt) >= thirtyDaysAgo
+                ).length;
+              }
+              
+              return allReminders.filter((r) => r.status === status).length;
+            })();
+            
             return (
               <button
                 key={status}
@@ -240,16 +292,31 @@ export default function RemindersPage() {
               <p className="text-sm">
                 {filter === "all" ? "No reminders yet." : `No ${filter} reminders.`}
               </p>
+              {filter === "dismissed" && (
+                <p className="text-xs text-[var(--on-surface-variant)]/60">
+                  Showing dismissed reminders from the last 30 days
+                </p>
+              )}
             </div>
           ) : (
-            <div className="p-6 space-y-3">
-              {filteredReminders.map((reminder) => (
-                <div
-                  key={reminder.id}
-                  className="rounded-md border border-[var(--outline-variant)]/20 bg-[var(--surface-container)] p-4"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex-1 min-w-0">
+            <>
+              {filter === "dismissed" && (
+                <div className="px-6 pt-4 pb-2">
+                  <p className="text-xs text-[var(--on-surface-variant)]/60 italic">
+                    Showing dismissed reminders from the last 30 days
+                  </p>
+                </div>
+              )}
+              <div className="p-6 space-y-3">
+              {filteredReminders.map((reminder) => {
+                const isPastDue = new Date(reminder.remindAt) <= new Date();
+                return (
+                  <div
+                    key={reminder.id}
+                    className="rounded-md border border-[var(--outline-variant)]/20 bg-[var(--surface-container)] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         {reminder.sourceUrl ? (
                           <a
@@ -288,44 +355,53 @@ export default function RemindersPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 self-start mt-1">
-                      {reminder.status !== "dismissed" && (
-                        <>
-                          {reminder.status === "pending" && (
-                            <button
-                              onClick={() => openEditDialog(reminder)}
-                              className="text-[10px] font-label text-[var(--primary)] hover:underline whitespace-nowrap"
-                            >
-                              Edit
-                            </button>
-                          )}
-                          <div className="relative">
-                            <button
-                              onClick={() => setSnoozeReminderId(reminder.id)}
-                              className="text-[10px] font-label text-[var(--primary)] hover:underline whitespace-nowrap"
-                            >
-                              Snooze
-                            </button>
-                            {snoozeReminderId === reminder.id && (
-                              <SnoozePopover
-                                onSnooze={(until) => void handleSnooze(reminder.id, until)}
-                                onClose={() => setSnoozeReminderId(null)}
-                              />
+                      <div className="flex items-center gap-1 shrink-0">
+                        {reminder.status !== "dismissed" && (
+                          <>
+                            {reminder.status === "pending" && !isPastDue && (
+                              <button
+                                onClick={() => openEditDialog(reminder)}
+                                className="p-2 rounded-md hover:bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors"
+                                title="Edit reminder"
+                              >
+                                <Edit2 size={14} />
+                              </button>
                             )}
-                          </div>
-                          <button
-                            onClick={() => void handleDismiss(reminder.id)}
-                            className="text-[10px] font-label text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] whitespace-nowrap"
-                          >
-                            Dismiss
-                          </button>
-                        </>
-                      )}
+                            {isPastDue && (
+                              <div className="relative">
+                                <button
+                                  onClick={() => setSnoozeReminderId(reminder.id)}
+                                  className="p-2 rounded-md hover:bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors"
+                                  title="Snooze reminder"
+                                >
+                                  <Clock size={14} />
+                                </button>
+                                {snoozeReminderId === reminder.id && (
+                                  <SnoozePopover
+                                    onSnooze={(until) => void handleSnooze(reminder.id, until)}
+                                    onClose={() => setSnoozeReminderId(null)}
+                                  />
+                                )}
+                              </div>
+                            )}
+                            {isPastDue && (
+                              <button
+                                onClick={() => void handleDismiss(reminder.id)}
+                                className="p-2 rounded-md hover:bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--error)] transition-colors"
+                                title="Dismiss reminder"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                );
+              })}
+              </div>
+            </>
           )}
         </div>
       </div>

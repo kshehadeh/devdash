@@ -17,6 +17,8 @@ export default function General() {
   const [syncToMacOS, setSyncToMacOS] = useState(false);
   const [macOSAvailable, setMacOSAvailable] = useState(false);
   const [macOSLoading, setMacOSLoading] = useState(true);
+  const [syncingNow, setSyncingNow] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const loadPref = useCallback(async () => {
     try {
@@ -95,6 +97,20 @@ export default function General() {
     }
   };
 
+  const onSyncNow = async () => {
+    setSyncingNow(true);
+    setSyncMessage(null);
+    try {
+      await invoke("reminders:sync-now");
+      setSyncMessage("Sync completed successfully");
+      setTimeout(() => setSyncMessage(null), 3000);
+    } catch (err) {
+      setSyncMessage(`Sync failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setSyncingNow(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="max-w-2xl flex flex-col gap-5">
@@ -149,7 +165,7 @@ export default function General() {
               Integrate DevDash reminders with the macOS Reminders app for system-wide notifications.
             </p>
 
-            <label className="flex items-start gap-3 cursor-pointer select-none">
+            <label className="flex items-start gap-3 cursor-pointer select-none mb-4">
               <input
                 type="checkbox"
                 className="mt-0.5 rounded border-[var(--outline-variant)]"
@@ -163,6 +179,23 @@ export default function General() {
                 </span>
               </span>
             </label>
+
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-container)] hover:bg-[var(--surface-container-high)] text-[var(--on-surface)] rounded-lg text-sm font-label transition disabled:opacity-50"
+              onClick={() => void onSyncNow()}
+              disabled={syncingNow || !syncToMacOS}
+            >
+              {syncingNow ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              Sync now (check macOS completions)
+            </button>
+
+            {syncMessage && (
+              <p className="text-xs font-label text-[var(--on-surface-variant)] mt-3">{syncMessage}</p>
+            )}
           </Card>
         )}
       </div>

@@ -7,6 +7,7 @@ import {
   listReminders,
   updateReminder,
   updateReminderStatus,
+  markReminderSyncedToMacOS,
   type CreateReminderInput,
   type ListRemindersOptions,
   type ReminderStatus,
@@ -15,14 +16,15 @@ import {
 import { getCurrentUserDeveloper } from "../db/developers";
 import { emitRemindersChanged, onRemindersChanged } from "../reminders/events";
 import { getConfig, setConfig } from "../db/config";
-import { isMacOSRemindersAvailable } from "../reminders/macos-integration";
+import { isMacOSRemindersAvailable, completeMacOSReminder, createMacOSReminder } from "../reminders/macos-integration";
+import { manualSyncFromMacOS } from "../reminders/scheduler";
 
 function currentUserId(): string | null {
   return getCurrentUserDeveloper()?.id ?? null;
 }
 
 export function registerReminderHandlers(getWindow: () => BrowserWindow | null) {
-  ipcMain.handle("reminders:create", (_e, data: CreateReminderInput) => {
+  ipcMain.handle("reminders:create", async (_e, data: CreateReminderInput) => {
     if (!data?.title || !data?.remindAt) throw new Error("Invalid reminder input");
     const devId = currentUserId();
     if (!devId) throw new Error("No current user");
@@ -32,6 +34,19 @@ export function registerReminderHandlers(getWindow: () => BrowserWindow | null) 
       developerId: devId,
     });
     emitRemindersChanged();
+    
+    // Immediately sync to macOS Reminders if enabled
+    const syncToMacOS = getConfig("reminders_sync_macos") === "1";
+    if (syncToMacOS && process.platform === "darwin") {
+      try {
+        await createMacOSReminder(reminder);
+        markReminderSyncedToMacOS(reminder.id, true);
+      } catch (err) {
+        console.error("Failed to sync new reminder to macOS:", err);
+        // Don't fail the create operation if macOS sync fails
+      }
+    }
+    
     return { reminder };
   });
 
@@ -57,11 +72,28 @@ export function registerReminderHandlers(getWindow: () => BrowserWindow | null) 
     return { success };
   });
 
-  ipcMain.handle("reminders:dismiss", (_e, data: { id: string }) => {
+  ipcMain.handle("reminders:dismiss", async (_e, data: { id: string }) => {
     if (!data?.id || typeof data.id !== "string") throw new Error("Invalid reminder id");
 
+    // Get the reminder before dismissing to sync with macOS
+    const reminder = getReminderById(data.id);
     const success = updateReminderStatus(data.id, "dismissed");
-    if (success) emitRemindersChanged();
+    
+    if (success) {
+      emitRemindersChanged();
+      
+      // If macOS sync is enabled and reminder exists, mark it as completed in macOS Reminders
+      const syncToMacOS = getConfig("reminders_sync_macos") === "1";
+      if (syncToMacOS && reminder && process.platform === "darwin") {
+        try {
+          await completeMacOSReminder(reminder.title);
+        } catch (err) {
+          console.error("Failed to complete macOS reminder:", err);
+          // Don't fail the dismiss operation if macOS sync fails
+        }
+      }
+    }
+    
     return { success };
   });
 
@@ -92,6 +124,11 @@ export function registerReminderHandlers(getWindow: () => BrowserWindow | null) 
   ipcMain.handle("reminders:config:set", (_e, data: { syncToMacOS: boolean }) => {
     if (typeof data?.syncToMacOS !== "boolean") throw new Error("Invalid syncToMacOS value");
     setConfig("reminders_sync_macos", data.syncToMacOS ? "1" : "0");
+    return { success: true };
+  });
+
+  ipcMain.handle("reminders:sync-now", async () => {
+    await manualSyncFromMacOS();
     return { success: true };
   });
 

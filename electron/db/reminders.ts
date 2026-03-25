@@ -13,6 +13,7 @@ export interface ReminderRecord {
   remindAt: string;
   status: ReminderStatus;
   snoozedUntil: string | null;
+  syncedToMacos: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,6 +28,7 @@ interface ReminderDbRow {
   remind_at: string;
   status: ReminderStatus;
   snoozed_until: string | null;
+  synced_to_macos: number;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +64,7 @@ function mapRow(row: ReminderDbRow): ReminderRecord {
     remindAt: row.remind_at,
     status: row.status,
     snoozedUntil: row.snoozed_until,
+    syncedToMacos: row.synced_to_macos === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -173,4 +176,12 @@ export function getDueReminders(): ReminderRecord[] {
      ORDER BY datetime(remind_at) ASC`,
   ).all() as ReminderDbRow[];
   return rows.map(mapRow);
+}
+
+export function markReminderSyncedToMacOS(id: string, synced: boolean): boolean {
+  const db = getDb();
+  const result = db.prepare(
+    "UPDATE reminders SET synced_to_macos = ?, updated_at = datetime('now') WHERE id = ?",
+  ).run(synced ? 1 : 0, id);
+  return result.changes > 0;
 }

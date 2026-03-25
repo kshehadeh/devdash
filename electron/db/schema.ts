@@ -373,6 +373,10 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_reminders_status_remind_at ON reminders(status, remind_at);
   CREATE INDEX IF NOT EXISTS idx_reminders_dev_status ON reminders(developer_id, status);
   `,
+  // v19 — add synced_to_macos flag to reminders
+  `
+  ALTER TABLE reminders ADD COLUMN synced_to_macos INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 
