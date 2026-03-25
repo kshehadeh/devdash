@@ -10,6 +10,8 @@ declare global {
       onUpdateAvailable: (callback: (payload: { version: string }) => void) => () => void;
       onNotificationOpen: (callback: (payload: { id: string }) => void) => () => void;
       onNotificationsChanged: (callback: () => void) => () => void;
+      onRemindersChanged: (callback: () => void) => () => void;
+      onReminderNavigate: (callback: (payload: { id: string }) => void) => () => void;
     };
   }
 }

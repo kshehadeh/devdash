@@ -35,4 +35,18 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.removeListener("notifications:changed", handler);
     };
   },
+  onRemindersChanged: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("reminders:changed", handler);
+    return () => {
+      ipcRenderer.removeListener("reminders:changed", handler);
+    };
+  },
+  onReminderNavigate: (callback: (payload: { id: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { id: string }) => callback(payload);
+    ipcRenderer.on("reminders:navigate", handler);
+    return () => {
+      ipcRenderer.removeListener("reminders:navigate", handler);
+    };
+  },
 });

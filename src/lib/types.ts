@@ -310,3 +310,29 @@ export interface NotificationsGroupedResponse {
   groups: NotificationGroup[];
   totalUnreadCount: number;
 }
+
+// ---------- Reminders ----------
+
+export type ReminderStatus = "pending" | "triggered" | "dismissed" | "snoozed";
+
+export interface ReminderRecord {
+  id: string;
+  developerId: string;
+  notificationId: string | null;
+  title: string;
+  comment: string;
+  sourceUrl: string | null;
+  remindAt: string;
+  status: ReminderStatus;
+  snoozedUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RemindersListResponse {
+  reminders: ReminderRecord[];
+}
+
+export interface ReminderCountResponse {
+  count: number;
+}
