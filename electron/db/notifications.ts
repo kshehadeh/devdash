@@ -147,7 +147,7 @@ export function listNotificationsForDeveloper(developerId: string, limit = 50): 
   const rows = db.prepare(
     `SELECT *
      FROM notifications
-     WHERE developer_id = ?
+     WHERE developer_id = ? AND integration != 'reminder'
      ORDER BY CASE WHEN status = 'new' THEN 0 ELSE 1 END ASC, datetime(created_at) DESC
      LIMIT ?`,
   ).all(developerId, limit) as NotificationDbRow[];
@@ -288,9 +288,10 @@ export function markBatchRead(ids: string[]): number {
 
 export function getUnreadNotificationCount(developerId?: string): number {
   const db = getDb();
+  // Exclude reminder notifications from the count
   const row = developerId
-    ? db.prepare("SELECT COUNT(*) as count FROM notifications WHERE developer_id = ? AND status = 'new'").get(developerId) as { count: number }
-    : db.prepare("SELECT COUNT(*) as count FROM notifications WHERE status = 'new'").get() as { count: number };
+    ? db.prepare("SELECT COUNT(*) as count FROM notifications WHERE developer_id = ? AND status = 'new' AND integration != 'reminder'").get(developerId) as { count: number }
+    : db.prepare("SELECT COUNT(*) as count FROM notifications WHERE status = 'new' AND integration != 'reminder'").get() as { count: number };
   return row.count;
 }
 

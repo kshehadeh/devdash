@@ -73,7 +73,11 @@ export function registerNotificationHandlers(getWindow: () => BrowserWindow | nu
       defs.map((d) => [d.notificationType, { sourceItemKey: d.sourceItemKey, sourceItemLabel: d.sourceItemLabel }]),
     );
     const groups = groupedNotificationsForDeveloper(devId, keyFnMap);
-    const labeled = groups.map((g) => ({
+    
+    // Filter out reminder notifications (they're shown in the reminders section instead)
+    const filtered = groups.filter((g) => g.integration !== "reminder");
+    
+    const labeled = filtered.map((g) => ({
       ...g,
       label: labelMap.get(g.notificationType) ?? g.notificationType,
     }));
