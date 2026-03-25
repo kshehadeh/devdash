@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
-import { SlidersHorizontal, Terminal, Database, HardDrive, Bell } from "lucide-react";
+import { SlidersHorizontal, Terminal, Database, HardDrive, Bell, Wrench } from "lucide-react";
 import { clsx } from "clsx";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 
@@ -9,6 +9,7 @@ const settingsNav = [
   { href: "/settings/connections", icon: Terminal, label: "Connected Systems", description: "API credentials" },
   { href: "/settings/sources", icon: Database, label: "Data Sources", description: "Repos, projects & spaces" },
   { href: "/settings/cache", icon: HardDrive, label: "Local cache", description: "Size & reset sync data" },
+  { href: "/settings/development", icon: Wrench, label: "Development", description: "Debug & developer tools" },
 ];
 
 export default function SettingsLayout() {

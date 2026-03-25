@@ -4,7 +4,6 @@ import { registerSourceHandlers } from "./sources";
 import { registerStatsHandlers } from "./stats";
 import { registerSyncHandlers } from "./sync";
 import { registerDiscoverHandlers } from "./discover";
-import { registerReferenceHandlers } from "./reference";
 import { registerReviewsHandlers } from "./reviews";
 import { registerSettingsIOHandlers } from "./settings-io";
 import { registerIntegrationHandlers } from "./integrations";
@@ -12,6 +11,7 @@ import { registerCacheAdminHandlers } from "./cache-admin";
 import { registerAppConfigHandlers } from "./app-config";
 import { registerUpdateHandlers } from "./updates";
 import { registerNotificationHandlers } from "./notifications";
+import { registerDevToolsHandlers } from "./dev-tools";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
@@ -26,7 +26,7 @@ export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerStatsHandlers();
   registerSyncHandlers();
   registerDiscoverHandlers();
-  registerReferenceHandlers();
   registerReviewsHandlers();
   registerSettingsIOHandlers(getWindow);
+  registerDevToolsHandlers(getWindow);
 }

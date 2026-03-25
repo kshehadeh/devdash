@@ -11,11 +11,8 @@ import Connections from "./pages/settings/Connections";
 import Sources from "./pages/settings/Sources";
 import Cache from "./pages/settings/Cache";
 import General from "./pages/settings/General";
+import Development from "./pages/settings/Development";
 import NotificationsSettings from "./pages/settings/Notifications";
-import ReferenceLayout from "./components/layout/ReferenceLayout";
-import PullRequests from "./pages/reference/PullRequests";
-import Tickets from "./pages/reference/Tickets";
-import Documents from "./pages/reference/Documents";
 import Reviews from "./pages/Reviews";
 import NotificationsPage from "./pages/notifications/NotificationsPage";
 import Onboarding from "./pages/Onboarding";
@@ -91,12 +88,7 @@ function RoutedApp() {
           <Route path="sources" element={<Sources />} />
           <Route path="cache" element={<Cache />} />
           <Route path="general" element={<General />} />
-        </Route>
-        <Route path="/reference" element={<ReferenceLayout />}>
-          <Route index element={<Navigate to="pull-requests" replace />} />
-          <Route path="pull-requests" element={<PullRequests />} />
-          <Route path="tickets" element={<Tickets />} />
-          <Route path="documents" element={<Documents />} />
+          <Route path="development" element={<Development />} />
         </Route>
       </Route>
     </Routes>
