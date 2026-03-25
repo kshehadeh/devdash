@@ -7,6 +7,7 @@ import { registerAllHandlers } from "./ipc/index";
 import { runExportSettings, runImportSettings } from "./ipc/settings-io";
 import { initAutoUpdate } from "./updater-service";
 import { startNotificationScheduler } from "./notifications/scheduler";
+import { startReminderScheduler } from "./reminders/scheduler";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -350,6 +351,7 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow();
   startNotificationScheduler(() => mainWindow);
+  startReminderScheduler(() => mainWindow);
   initAutoUpdate(() => mainWindow, isDev);
 
   app.on("activate", () => {
