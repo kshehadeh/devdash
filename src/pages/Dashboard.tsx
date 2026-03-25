@@ -4,10 +4,10 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Card } from "@/components/ui/Card";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { MetricsBar } from "@/components/dashboard/MetricsBar";
-import { CommitHeatmap } from "@/components/dashboard/CommitHeatmap";
+import { CommitBarChart } from "@/components/dashboard/CommitBarChart";
+import { PRCommentBarChart } from "@/components/dashboard/PRCommentBarChart";
 import { PullRequestList } from "@/components/dashboard/PullRequestList";
 import { ConfluenceSection } from "@/components/dashboard/ConfluenceSection";
-import { EffortDistribution } from "@/components/dashboard/EffortDistribution";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
 import { invoke, useIpc } from "@/lib/api";
 import { useAppStatus } from "@/context/AppStatusContext";
@@ -18,6 +18,7 @@ import type {
   VelocityStatsResponse,
   TicketsStatsResponse,
   ConfluenceStatsResponse,
+  PRReviewCommentsResponse,
 } from "@/lib/types";
 
 const LOOKBACK_OPTIONS = [
@@ -79,6 +80,7 @@ export default function DashboardPage() {
   const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const tickets = useIpc<TicketsStatsResponse>(selectedDevId ? "stats:work" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const confluence = useIpc<ConfluenceStatsResponse>(selectedDevId ? "stats:docs" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const reviewComments = useIpc<PRReviewCommentsResponse>(selectedDevId ? "stats:review-comments" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
 
   if (loading) {
     return (
@@ -221,9 +223,9 @@ export default function DashboardPage() {
                 ) : null}
               </div>
 
-              <div className="grid grid-cols-4 gap-4">
-                <div className="col-span-3">
-                  {/* GitHub Contributions Heatmap */}
+              <div className="grid grid-cols-2 gap-4 items-start">
+                {/* Commit Activity + PR Review Comments stacked */}
+                <div className="flex flex-col gap-4">
                   {github.loading ? (
                     <CardSkeleton lines={8} />
                   ) : github.data ? (
@@ -232,48 +234,49 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2">
                           <Github size={16} className="text-[var(--primary)]" />
                           <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                            GitHub Contributions
+                            Commit Activity
                           </h3>
                         </div>
                         <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                          Heatmap: 1 year
+                          Last {lookbackDays} days
                         </span>
                       </div>
-                      <CommitHeatmap commits={github.data.commitHistory} totalYTD={github.data.commitsYTD} />
+                      <CommitBarChart commits={github.data.commitHistory} lookbackDays={lookbackDays} />
                     </Card>
                   ) : null}
-                </div>
 
-                <div className="flex flex-col gap-4">
-                  {/* Confluence */}
-                  {confluence.loading ? (
+                  {reviewComments.loading ? (
                     <CardSkeleton lines={5} />
-                  ) : confluence.data ? (
+                  ) : reviewComments.data ? (
                     <Card>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <BookOpen size={16} className="text-[var(--primary)]" />
-                          <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                            Documentation
-                          </h3>
-                        </div>
-                        <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                          Recent
-                        </span>
-                      </div>
-                      <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
-                    </Card>
-                  ) : null}
-
-                  {/* Effort Distribution */}
-                  {github.loading ? (
-                    <CardSkeleton lines={3} />
-                  ) : github.data ? (
-                    <Card>
-                      <EffortDistribution distribution={github.data.effortDistribution} />
+                      <PRCommentBarChart
+                        commentDays={reviewComments.data.commentDays}
+                        totalComments={reviewComments.data.totalComments}
+                        lookbackDays={lookbackDays}
+                      />
                     </Card>
                   ) : null}
                 </div>
+
+                {/* Confluence */}
+                {confluence.loading ? (
+                  <CardSkeleton lines={5} />
+                ) : confluence.data ? (
+                  <Card>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <BookOpen size={16} className="text-[var(--primary)]" />
+                        <h3 className="text-sm font-semibold text-[var(--on-surface)]">
+                          Documentation
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                        Recent
+                      </span>
+                    </div>
+                    <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
+                  </Card>
+                ) : null}
               </div>
             </div>
           </>

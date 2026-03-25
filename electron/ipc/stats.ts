@@ -12,10 +12,11 @@ import {
   getCachedJiraTickets, getCachedCompletedTicketCount,
   getCachedConfluencePages, getCachedConfluenceActivity,
   getCachedLinearTicketsAsJiraShape, getCachedLinearCompletedCount,
+  getCachedPRReviewComments,
 } from "../db/cache";
 import { syncDeveloper } from "../sync/engine";
 import type { JiraTicket, CommitDay, PullRequest, ConfluenceDoc, ConfluenceActivity } from "../types";
-import type { GithubStatsResponse, VelocityStatsResponse, TicketsStatsResponse, ConfluenceStatsResponse } from "../types";
+import type { GithubStatsResponse, VelocityStatsResponse, TicketsStatsResponse, ConfluenceStatsResponse, PRReviewCommentsResponse } from "../types";
 
 function computeWorkloadHealth(tickets: JiraTicket[]): number {
   const inProgressCount = tickets.filter((t) => t.statusCategory === "in_progress").length;
@@ -293,6 +294,39 @@ async function buildConfluenceStats(id: string, days: number): Promise<Confluenc
   };
 }
 
+async function buildPRReviewCommentsStats(id: string, days: number): Promise<PRReviewCommentsResponse> {
+  const ctx = getStatsContext(id, days);
+  if (!ctx || ctx.integration.code !== "github") {
+    return { commentDays: [], totalComments: 0 };
+  }
+
+  const comments = getCachedPRReviewComments(id, days, ctx.repoFilter.length > 0 ? ctx.repoFilter : undefined);
+
+  // Aggregate by date (YYYY-MM-DD)
+  const byDay = new Map<string, number>();
+  for (const c of comments) {
+    const day = c.createdAt.slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + 1);
+  }
+
+  // Fill every day in the lookback window (including zeros)
+  const commentDays: CommitDay[] = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    commentDays.push({ date: key, count: byDay.get(key) ?? 0 });
+  }
+
+  const sync = getSyncStatus(id, "github_pr_review_comments");
+  return {
+    commentDays,
+    totalComments: comments.length,
+    _syncedAt: sync?.lastSyncedAt,
+  };
+}
+
 export function registerStatsHandlers() {
   const register = (
     channel: string,
@@ -307,6 +341,7 @@ export function registerStatsHandlers() {
 
   register("stats:github", buildGithubStats);
   register("stats:code", buildGithubStats);
+  register("stats:review-comments", buildPRReviewCommentsStats);
   register("stats:velocity", buildVelocityStats);
   register("stats:tickets", buildTicketsStats);
   register("stats:work", buildTicketsStats);

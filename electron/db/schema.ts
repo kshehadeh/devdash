@@ -322,6 +322,26 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (integration, notification_type)
   );
   `,
+  // v15 — placeholder (index consumed by earlier migration re-run)
+  `SELECT 1;`,
+  // v16 — PR review comments made by the developer
+  `
+  CREATE TABLE IF NOT EXISTS cached_pr_review_comments (
+    developer_id TEXT NOT NULL,
+    comment_id INTEGER NOT NULL,
+    repo TEXT NOT NULL,
+    pr_number INTEGER NOT NULL,
+    commit_sha TEXT NOT NULL DEFAULT '',
+    path TEXT,
+    body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    url TEXT,
+    PRIMARY KEY (developer_id, comment_id),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_cached_pr_review_comments_dev_created
+    ON cached_pr_review_comments(developer_id, created_at);
+  `,
 ];
 
 

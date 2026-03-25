@@ -1,6 +1,7 @@
 import { getDb } from "./index";
 import type {
   CommitDay,
+  PRReviewComment,
   PullRequest,
   ConfluenceDoc,
   JiraTicket,
@@ -450,5 +451,48 @@ export function getCachedLinearCompletedCount(
   ).get(devId, sinceStr, ...teamValues) as { c: number };
 
   return row.c;
+}
+
+// ---------- PR Review Comments ----------
+
+export function getCachedPRReviewComments(
+  devId: string,
+  days: number,
+  repos?: { org: string; name: string }[],
+): PRReviewComment[] {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+
+  const rows = db.prepare(`
+    SELECT comment_id, repo, pr_number, commit_sha, path, body, created_at, url
+    FROM cached_pr_review_comments
+    WHERE developer_id = ? AND created_at >= ?${repoSql}
+    ORDER BY created_at DESC
+    LIMIT 200
+  `).all(devId, sinceStr, ...repoValues) as {
+    comment_id: number;
+    repo: string;
+    pr_number: number;
+    commit_sha: string;
+    path: string | null;
+    body: string;
+    created_at: string;
+    url: string | null;
+  }[];
+
+  return rows.map((row) => ({
+    id: `prc-${row.comment_id}`,
+    repo: row.repo,
+    prNumber: row.pr_number,
+    commitSha: row.commit_sha,
+    path: row.path,
+    body: row.body,
+    createdAt: row.created_at,
+    timeAgo: timeAgo(row.created_at),
+    url: row.url,
+  }));
 }
 

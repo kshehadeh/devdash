@@ -176,6 +176,24 @@ export interface ConfluenceStatsResponse {
   _syncedAt?: string;
 }
 
+export interface PRReviewCommentsResponse {
+  commentDays: CommitDay[];
+  totalComments: number;
+  _syncedAt?: string;
+}
+
+export interface PRReviewComment {
+  id: string;
+  repo: string;
+  prNumber: number;
+  commitSha: string;
+  path: string | null;
+  body: string;
+  createdAt: string;
+  timeAgo: string;
+  url: string | null;
+}
+
 export type DataSourceType = "github_repo" | "jira_project" | "confluence_space" | "linear_team";
 
 export interface JiraBoardRef {

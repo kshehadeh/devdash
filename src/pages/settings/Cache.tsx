@@ -6,6 +6,7 @@ import { invoke } from "@/lib/api";
 type CacheBucketId =
   | "github_contributions"
   | "github_pull_requests"
+  | "github_pr_review_comments"
   | "jira_tickets"
   | "linear_issues"
   | "confluence_pages";

@@ -229,6 +229,122 @@ export async function syncPullRequests(developerId: string): Promise<void> {
   }
 }
 
+// ---------- PR Review Comments Sync ----------
+
+export async function syncPRReviewComments(developerId: string): Promise<void> {
+  const db = getDb();
+  const dev = getDeveloper(developerId);
+  const ghConn = getConnection("github");
+  if (!dev?.githubUsername || !ghConn?.connected || !ghConn.token) return;
+
+  const token = ghConn.token;
+  const username = dev.githubUsername;
+
+  const devSources = getSourcesForDeveloper(developerId);
+  const ghRepos = devSources
+    .filter((s) => s.type === "github_repo")
+    .map((s) => ({ org: s.org, name: s.identifier }));
+
+  if (ghRepos.length === 0) {
+    setSyncStatus(developerId, "github_pr_review_comments", "ok");
+    return;
+  }
+
+  setSyncStatus(developerId, "github_pr_review_comments", "syncing");
+
+  try {
+    const syncLog = db.prepare(
+      "SELECT last_cursor FROM sync_log WHERE developer_id = ? AND data_type = 'github_pr_review_comments'",
+    ).get(developerId) as { last_cursor: string | null } | undefined;
+
+    const since = syncLog?.last_cursor
+      ? syncLog.last_cursor
+      : (() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString(); })();
+
+    type RawComment = {
+      id: number;
+      commit_id: string;
+      path: string | null;
+      body: string;
+      created_at: string;
+      html_url: string;
+      user: { login: string } | null;
+      pull_request_url: string;
+      repoPath: string;
+    };
+
+    const collected: RawComment[] = [];
+
+    for (const repo of ghRepos) {
+      const repoPath = `${repo.org}/${repo.name}`;
+      let page = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const url = `${GITHUB_API}/repos/${repoPath}/pulls/comments?since=${encodeURIComponent(since)}&per_page=100&page=${page}`;
+        const res = await fetch(url, { headers: headers(token) });
+        if (!res.ok) break;
+
+        const items = await res.json() as Array<{
+          id: number;
+          commit_id: string;
+          path: string | null;
+          body: string;
+          created_at: string;
+          html_url: string;
+          user: { login: string } | null;
+          pull_request_url: string;
+        }>;
+
+        if (!Array.isArray(items) || items.length === 0) break;
+
+        for (const item of items) {
+          if (item.user?.login === username) {
+            collected.push({ ...item, repoPath });
+          }
+        }
+
+        hasMore = items.length === 100 && page < 10;
+        page++;
+      }
+    }
+
+    let latestCreatedAt = since;
+
+    const upsert = db.prepare(`
+      INSERT OR REPLACE INTO cached_pr_review_comments
+        (developer_id, comment_id, repo, pr_number, commit_sha, path, body, created_at, url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    db.transaction(() => {
+      for (const item of collected) {
+        const prNumber = parseInt(item.pull_request_url.split("/").pop() ?? "0", 10);
+        if (!prNumber) continue;
+
+        upsert.run(
+          developerId,
+          item.id,
+          item.repoPath,
+          prNumber,
+          item.commit_id,
+          item.path ?? null,
+          item.body,
+          item.created_at,
+          item.html_url,
+        );
+
+        if (item.created_at > latestCreatedAt) latestCreatedAt = item.created_at;
+      }
+    })();
+
+    setSyncStatus(developerId, "github_pr_review_comments", "ok", null, latestCreatedAt);
+  } catch (err) {
+    setSyncStatus(developerId, "github_pr_review_comments", "error", String(err));
+    throw err;
+  }
+}
+
 // ---------- Helpers ----------
 
 function setSyncStatus(
