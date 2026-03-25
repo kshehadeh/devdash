@@ -26,6 +26,7 @@ export function SourceFormDialog({
   const [name, setName] = useState(existing?.name ?? "");
   const [org, setOrg] = useState(existing?.org ?? "");
   const [identifier, setIdentifier] = useState(existing?.identifier ?? "");
+  const [selectedRepos, setSelectedRepos] = useState<string[]>([]);
   const [boards, setBoards] = useState<JiraBoardRef[]>(
     (existing?.metadata?.boards as JiraBoardRef[] | undefined) ?? [],
   );
@@ -36,6 +37,7 @@ export function SourceFormDialog({
   const [ghRepos, setGhRepos] = useState<ComboboxOption[]>([]);
   const [ghOrgsLoading, setGhOrgsLoading] = useState(false);
   const [ghReposLoading, setGhReposLoading] = useState(false);
+  const [repoSearchQuery, setRepoSearchQuery] = useState("");
 
   const [jiraProjects, setJiraProjects] = useState<ComboboxOption[]>([]);
   const [jiraProjectsLoading, setJiraProjectsLoading] = useState(false);
@@ -190,9 +192,23 @@ export function SourceFormDialog({
     if (!name) setName(repoName);
   }
 
+  function toggleRepo(repoName: string) {
+    setSelectedRepos((prev) => {
+      const exists = prev.includes(repoName);
+      const newRepos = exists ? prev.filter((r) => r !== repoName) : [...prev, repoName];
+      
+      if (newRepos.length === 1 && !name) {
+        setName(newRepos[0]);
+      }
+      
+      return newRepos;
+    });
+  }
+
   function handleOrgSelect(orgLogin: string) {
     setOrg(orgLogin);
     setIdentifier("");
+    setSelectedRepos([]);
     setGhRepos([]);
   }
 
@@ -233,23 +249,39 @@ export function SourceFormDialog({
     setSaving(true);
     setError("");
 
-    const payload: Record<string, unknown> = {
-      name: name.trim(),
-      org: org.trim(),
-      identifier: identifier.trim(),
-    };
-    if (sourceType === "jira_project") {
-      payload.metadata = { boards };
-    }
-    if (!isEdit) {
-      payload.type = sourceType;
-    }
-
     try {
       if (isEdit) {
+        const payload: Record<string, unknown> = {
+          name: name.trim(),
+          org: org.trim(),
+          identifier: identifier.trim(),
+        };
+        if (sourceType === "jira_project") {
+          payload.metadata = { boards };
+        }
         await invoke("sources:upsert", { id: existing!.id, ...payload });
       } else {
-        await invoke("sources:create", payload);
+        if (sourceType === "github_repo" && selectedRepos.length > 0) {
+          for (const repoName of selectedRepos) {
+            await invoke("sources:create", {
+              type: sourceType,
+              name: selectedRepos.length === 1 && name.trim() ? name.trim() : repoName,
+              org: org.trim(),
+              identifier: repoName,
+            });
+          }
+        } else {
+          const payload: Record<string, unknown> = {
+            type: sourceType,
+            name: name.trim(),
+            org: org.trim(),
+            identifier: identifier.trim(),
+          };
+          if (sourceType === "jira_project") {
+            payload.metadata = { boards };
+          }
+          await invoke("sources:create", payload);
+        }
       }
       onSaved();
     } catch (err) {
@@ -272,15 +304,85 @@ export function SourceFormDialog({
               placeholder="Select an organization..."
               loading={ghOrgsLoading}
             />
-            <Combobox
-              label="Repository"
-              options={ghRepos}
-              value={identifier}
-              onChange={handleRepoSelect}
-              placeholder={org ? "Select a repository..." : "Select an org first"}
-              loading={ghReposLoading}
-              disabled={!org}
-            />
+            {isEdit ? (
+              <Combobox
+                label="Repository"
+                options={ghRepos}
+                value={identifier}
+                onChange={handleRepoSelect}
+                placeholder={org ? "Select a repository..." : "Select an org first"}
+                loading={ghReposLoading}
+                disabled={!org}
+              />
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                    Repositories
+                  </label>
+                  {selectedRepos.length > 0 && (
+                    <span className="text-xs font-label text-[var(--primary)]">
+                      {selectedRepos.length} selected
+                    </span>
+                  )}
+                </div>
+                {ghReposLoading ? (
+                  <div className="flex items-center gap-2 py-3 text-xs text-[var(--on-surface-variant)]">
+                    <Loader2 size={14} className="animate-spin" />
+                    Loading repositories...
+                  </div>
+                ) : !org ? (
+                  <p className="text-xs text-[var(--on-surface-variant)] py-2">
+                    Select an organization first
+                  </p>
+                ) : ghRepos.length === 0 ? (
+                  <p className="text-xs text-[var(--on-surface-variant)] py-2">
+                    No repositories found for this organization
+                  </p>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={repoSearchQuery}
+                      onChange={(e) => setRepoSearchQuery(e.target.value)}
+                      placeholder="Search repositories..."
+                      className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 mb-2 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)]"
+                    />
+                    <div className="flex flex-col gap-1 max-h-64 overflow-y-auto border border-[var(--outline-variant)]/20 rounded-md p-1">
+                      {ghRepos
+                        .filter((repo) =>
+                          repoSearchQuery.trim()
+                            ? repo.label.toLowerCase().includes(repoSearchQuery.toLowerCase()) ||
+                              repo.description?.toLowerCase().includes(repoSearchQuery.toLowerCase())
+                            : true
+                        )
+                        .map((repo) => {
+                          const checked = selectedRepos.includes(repo.value);
+                          return (
+                            <label
+                              key={repo.value}
+                              className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleRepo(repo.value)}
+                                className="accent-[var(--primary)] w-3.5 h-3.5 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm text-[var(--on-surface)] truncate">{repo.label}</div>
+                                {repo.description && (
+                                  <div className="text-xs text-[var(--on-surface-variant)] truncate">{repo.description}</div>
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -365,19 +467,21 @@ export function SourceFormDialog({
           />
         )}
 
-        <div>
-          <label className="block text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-1.5">
-            Display Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Auto-filled from selection"
-            required
-            className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)]"
-          />
-        </div>
+        {!(sourceType === "github_repo" && !isEdit && selectedRepos.length > 1) && (
+          <div>
+            <label className="block text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-1.5">
+              Display Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Auto-filled from selection"
+              required
+              className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)]"
+            />
+          </div>
+        )}
 
         {error && (
           <p className="text-xs text-[var(--error)] bg-[var(--error)]/10 px-3 py-2 rounded-md">
@@ -388,10 +492,21 @@ export function SourceFormDialog({
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={saving || !identifier}
+            disabled={
+              saving ||
+              (sourceType === "github_repo" && !isEdit
+                ? selectedRepos.length === 0
+                : !identifier)
+            }
             className="px-4 py-2 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-container)] text-[var(--on-primary)] text-sm font-semibold rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {saving ? "Saving..." : isEdit ? "Save Changes" : "Add"}
+            {saving
+              ? "Saving..."
+              : isEdit
+                ? "Save Changes"
+                : sourceType === "github_repo" && selectedRepos.length > 1
+                  ? `Add ${selectedRepos.length} Repositories`
+                  : "Add"}
           </button>
           <button
             type="button"
