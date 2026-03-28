@@ -4,6 +4,8 @@ export interface ContextMenuContext {
   title: string;
   url: string | null;
   itemType: "pr" | "ticket" | "doc";
+  /** When set (e.g. from the notifications UI), the reminder is tied to this notification row. */
+  notificationId?: string | null;
 }
 
 export interface ContextMenuAction {
@@ -18,6 +20,7 @@ declare global {
       platform: string;
       invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
       onMenuNavigate: (callback: (path: string) => void) => void;
+      onOpenCommandPalette: (callback: () => void) => () => void;
       onSyncProgress: (callback: (payload: unknown) => void) => () => void;
       onUpdateAvailable: (callback: (payload: { version: string }) => void) => () => void;
       onNotificationOpen: (callback: (payload: { id: string }) => void) => () => void;

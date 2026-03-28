@@ -326,7 +326,81 @@ function buildMenu() {
       ],
     },
     { role: "editMenu" },
-    { role: "viewMenu" },
+    {
+      label: "View",
+      submenu: [
+        {
+          label: "Command Palette…",
+          accelerator: "CmdOrCtrl+K",
+          click: () => mainWindow?.webContents.send("menu:open-command-palette"),
+        },
+        { type: "separator" },
+        {
+          label: "Dashboard",
+          click: () => mainWindow?.webContents.send("menu:navigate", "/"),
+        },
+        {
+          label: "My Day",
+          click: () => mainWindow?.webContents.send("menu:navigate", "/my-day"),
+        },
+        {
+          label: "Team",
+          click: () => mainWindow?.webContents.send("menu:navigate", "/team"),
+        },
+        {
+          label: "Reviews",
+          click: () => mainWindow?.webContents.send("menu:navigate", "/reviews"),
+        },
+        {
+          label: "Notifications",
+          click: () => mainWindow?.webContents.send("menu:navigate", "/notifications"),
+        },
+        {
+          label: "Reminders",
+          click: () => mainWindow?.webContents.send("menu:navigate", "/reminders"),
+        },
+        { type: "separator" },
+        {
+          label: "Settings",
+          submenu: [
+            {
+              label: "General",
+              click: () => mainWindow?.webContents.send("menu:navigate", "/settings/general"),
+            },
+            {
+              label: "Notifications",
+              click: () => mainWindow?.webContents.send("menu:navigate", "/settings/notifications"),
+            },
+            {
+              label: "Connected Systems",
+              click: () => mainWindow?.webContents.send("menu:navigate", "/settings/connections"),
+            },
+            {
+              label: "Data Sources",
+              click: () => mainWindow?.webContents.send("menu:navigate", "/settings/sources"),
+            },
+            {
+              label: "Local cache",
+              click: () => mainWindow?.webContents.send("menu:navigate", "/settings/cache"),
+            },
+            {
+              label: "Development",
+              click: () => mainWindow?.webContents.send("menu:navigate", "/settings/development"),
+            },
+          ],
+        },
+        { type: "separator" },
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
     { role: "windowMenu" },
   ];
 

@@ -70,7 +70,9 @@ Row click sets `setSelectedDevId` and navigates to **`/`** (dashboard) with that
 
 **Shortcuts:** **⌘K** / **Ctrl+K** (toggle). **Escape** closes.
 
-**UI:** `src/components/CommandPalette.tsx` — mounted in `App.tsx` inside main layout with prop `developerId` set to the selected developer id or `null`.
+**Discovery:** The sidebar shows a **Search** control with shortcut hints under the app icon. **View → Command Palette…** (same shortcut) and **View** menu entries jump to main and settings routes via `menu:navigate` (`electron/main.ts`).
+
+**UI:** `src/components/CommandPalette.tsx` — mounted in `App.tsx` inside main layout with prop `developerId` set to the selected developer id or `null`, and controlled open state from the layout (sidebar + menu IPC).
 
 **Behavior:**
 

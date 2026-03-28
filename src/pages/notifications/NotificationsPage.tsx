@@ -5,7 +5,13 @@ import { useSearchParams } from "react-router-dom";
 import { Bell, ChevronDown, ChevronRight, ExternalLink, RefreshCw, AlarmClock } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
+import { useContextMenu } from "@/hooks/useContextMenu";
 import { ReminderDialog } from "@/components/reminders/ReminderDialog";
+import {
+  formatReminderTitle,
+  notificationReminderMenuContext,
+  notificationSourceGroupReminderMenuContext,
+} from "@/lib/reminder-context";
 import type { NotificationGroup, NotificationRecord, NotificationSourceGroup, NotificationsGroupedResponse } from "@/lib/types";
 
 function formatWhen(iso: string): string {
@@ -61,7 +67,12 @@ export default function NotificationsPage() {
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const contentRef = useRef<HTMLDivElement>(null);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
-  const [reminderForNotification, setReminderForNotification] = useState<NotificationRecord | null>(null);
+  const [reminderTarget, setReminderTarget] = useState<{
+    notification: NotificationRecord;
+    integration: string;
+    sourceGroup: NotificationSourceGroup;
+  } | null>(null);
+  const { showContextMenu } = useContextMenu();
 
   const groupParam = searchParams.get("group");
 
@@ -164,10 +175,47 @@ export default function NotificationsPage() {
     void load();
   }
 
-  function openReminderDialog(notification: NotificationRecord) {
-    setReminderForNotification(notification);
+  function openReminderDialog(
+    integration: string,
+    sourceGroup: NotificationSourceGroup,
+    notification: NotificationRecord,
+  ) {
+    setReminderTarget({ notification, integration, sourceGroup });
     setReminderDialogOpen(true);
   }
+
+  function showNotificationContextMenu(
+    integration: string,
+    sourceGroup: NotificationSourceGroup,
+    notification: NotificationRecord,
+  ) {
+    const ctx = notificationReminderMenuContext(integration, notification, sourceGroup);
+    showContextMenu({
+      title: ctx.title,
+      url: ctx.url,
+      itemType: ctx.itemType,
+      notificationId: ctx.notificationId,
+    });
+  }
+
+  function showSourceGroupContextMenu(integration: string, sourceGroup: NotificationSourceGroup) {
+    const ctx = notificationSourceGroupReminderMenuContext(integration, sourceGroup);
+    if (!ctx) return;
+    showContextMenu({
+      title: ctx.title,
+      url: ctx.url,
+      itemType: ctx.itemType,
+      notificationId: ctx.notificationId,
+    });
+  }
+
+  const reminderDialogCtx =
+    reminderTarget &&
+    notificationReminderMenuContext(
+      reminderTarget.integration,
+      reminderTarget.notification,
+      reminderTarget.sourceGroup,
+    );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -306,7 +354,13 @@ export default function NotificationsPage() {
                         return (
                           <div key={sg.sourceItemKey}>
                             {/* Source item header */}
-                            <div className="flex items-center gap-2 px-4 py-2.5 bg-[var(--surface-container-low)]/60 hover:bg-[var(--surface-container-low)] transition-colors">
+                            <div
+                              className="flex items-center gap-2 px-4 py-2.5 bg-[var(--surface-container-low)]/60 hover:bg-[var(--surface-container-low)] transition-colors"
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                showSourceGroupContextMenu(group.integration, sg);
+                              }}
+                            >
                               {multiRow ? (
                                 <button
                                   className="flex items-center gap-2 flex-1 min-w-0 text-left"
@@ -361,6 +415,10 @@ export default function NotificationsPage() {
                                     <div
                                       key={n.id}
                                       className="w-full text-left px-6 py-2.5 hover:bg-[var(--surface-container-low)] transition-colors flex items-start gap-3 group"
+                                      onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        showNotificationContextMenu(group.integration, sg, n);
+                                      }}
                                     >
                                       <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full block" style={{ backgroundColor: n.status === "new" ? "var(--primary)" : "transparent", border: n.status !== "new" ? "1px solid var(--outline-variant)" : "none" }} />
                                       <button
@@ -381,7 +439,7 @@ export default function NotificationsPage() {
                                         </p>
                                       </button>
                                       <button
-                                        onClick={() => openReminderDialog(n)}
+                                        onClick={() => openReminderDialog(group.integration, sg, n)}
                                         className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-1 hover:bg-[var(--surface-container)] rounded"
                                         title="Set reminder"
                                       >
@@ -405,18 +463,18 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {reminderDialogOpen && reminderForNotification && (
+      {reminderDialogOpen && reminderTarget && reminderDialogCtx && (
         <ReminderDialog
-          notificationId={reminderForNotification.id}
-          initialTitle={reminderForNotification.title}
-          initialSourceUrl={reminderForNotification.sourceUrl || undefined}
+          notificationId={reminderTarget.notification.id}
+          initialTitle={formatReminderTitle(reminderDialogCtx.itemType, reminderDialogCtx.title)}
+          initialSourceUrl={reminderDialogCtx.url || undefined}
           onClose={() => {
             setReminderDialogOpen(false);
-            setReminderForNotification(null);
+            setReminderTarget(null);
           }}
           onSave={() => {
             setReminderDialogOpen(false);
-            setReminderForNotification(null);
+            setReminderTarget(null);
           }}
         />
       )}

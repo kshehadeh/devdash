@@ -5,6 +5,7 @@ export interface ContextMenuContext {
   title: string;
   url: string | null;
   itemType: "pr" | "ticket" | "doc";
+  notificationId?: string | null;
 }
 
 export interface ContextMenuAction {

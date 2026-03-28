@@ -19,20 +19,51 @@ import RemindersPage from "./pages/reminders/RemindersPage";
 import MyDayPage from "./pages/MyDay";
 import TeamPage from "./pages/Team";
 import Onboarding from "./pages/Onboarding";
-import { invoke } from "./lib/api";
+import { invoke, type ContextMenuAction } from "./lib/api";
+import { formatReminderTitle } from "./lib/reminder-context";
 import { useSelectedDeveloper } from "./context/SelectedDeveloperContext";
 import { CommandPalette } from "./components/CommandPalette";
 
 function MainLayoutInner() {
   const { selectedDevId } = useSelectedDeveloper();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const cleanup = window.electron.onOpenCommandPalette(() => {
+      setPaletteOpen((o) => !o);
+    });
+    return cleanup;
+  }, []);
+
+  useEffect(() => {
+    const cleanup = window.electron.onContextMenuAction((payload: ContextMenuAction) => {
+      if (payload.action === "remind-me" && payload.remindAt) {
+        invoke("reminders:create", {
+          notificationId: payload.context.notificationId ?? null,
+          title: formatReminderTitle(payload.context.itemType, payload.context.title),
+          comment: "",
+          sourceUrl: payload.context.url || null,
+          remindAt: payload.remindAt,
+        }).catch((err) => {
+          console.error("Failed to create reminder:", err);
+        });
+      }
+    });
+    return cleanup;
+  }, []);
+
   return (
     <div className="flex h-full w-full min-h-0 flex-1">
-      <Sidebar />
+      <Sidebar onOpenCommandPalette={() => setPaletteOpen(true)} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-12">
         <Outlet />
         <StatusBar />
       </div>
-      <CommandPalette developerId={selectedDevId || null} />
+      <CommandPalette
+        developerId={selectedDevId || null}
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+      />
     </div>
   );
 }

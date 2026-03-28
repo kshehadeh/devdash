@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@/lib/api";
+import { useContextMenu } from "@/hooks/useContextMenu";
+import { notificationSourceGroupReminderMenuContext } from "@/lib/reminder-context";
 import type { NotificationGroup, NotificationsGroupedResponse } from "@/lib/types";
 
 export function NotificationCenter() {
@@ -12,6 +14,7 @@ export function NotificationCenter() {
   const [groups, setGroups] = useState<NotificationGroup[]>([]);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const navigate = useNavigate();
+  const { showContextMenu } = useContextMenu();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +102,17 @@ export function NotificationCenter() {
                   <button
                     key={`${g.notificationType}::${sg.sourceItemKey}`}
                     onClick={() => navigateToGroup(g.notificationType)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      const ctx = notificationSourceGroupReminderMenuContext(g.integration, sg);
+                      if (!ctx) return;
+                      showContextMenu({
+                        title: ctx.title,
+                        url: ctx.url,
+                        itemType: ctx.itemType,
+                        notificationId: ctx.notificationId,
+                      });
+                    }}
                     className="w-full text-left px-3 py-2 border-b border-[var(--outline-variant)]/10 hover:bg-[var(--surface-bright)] transition-colors flex items-center justify-between gap-2"
                   >
                     <div className="min-w-0">

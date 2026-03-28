@@ -7,8 +7,15 @@ import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
 import type { GlobalSearchResult } from "@/lib/types";
 
-export function CommandPalette({ developerId }: { developerId: string | null }) {
-  const [open, setOpen] = useState(false);
+export function CommandPalette({
+  developerId,
+  open,
+  onOpenChange,
+}: {
+  developerId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GlobalSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,13 +29,13 @@ export function CommandPalette({ developerId }: { developerId: string | null }) 
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((o) => !o);
+        onOpenChange(!open);
       }
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") onOpenChange(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) {
@@ -65,9 +72,9 @@ export function CommandPalette({ developerId }: { developerId: string | null }) 
     (r: GlobalSearchResult) => {
       if (r.navigatePath) navigate(r.navigatePath);
       if (r.openUrl) window.open(r.openUrl, "_blank", "noopener,noreferrer");
-      setOpen(false);
+      onOpenChange(false);
     },
-    [navigate],
+    [navigate, onOpenChange],
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -96,7 +103,7 @@ export function CommandPalette({ developerId }: { developerId: string | null }) 
       role="dialog"
       aria-modal
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) setOpen(false);
+        if (e.target === e.currentTarget) onOpenChange(false);
       }}
     >
       <div

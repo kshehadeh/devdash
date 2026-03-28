@@ -12,7 +12,7 @@ import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
 import { TriggeredRemindersBanner } from "@/components/reminders/TriggeredRemindersBanner";
 import { DashboardCustomizeDialog } from "@/components/dashboard/DashboardCustomizeDialog";
 import { type DashboardWidgetId, parseDashboardLayoutJson } from "@/lib/dashboard-widgets";
-import { invoke, useIpc, type ContextMenuAction } from "@/lib/api";
+import { invoke, useIpc } from "@/lib/api";
 import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import type {
   Developer,
@@ -73,30 +73,6 @@ export default function DashboardPage() {
       setReportLoading(false);
     }
   }, [selectedDevId, lookbackDays]);
-
-  // Global context menu action listener
-  useEffect(() => {
-    const cleanup = window.electron.onContextMenuAction((payload: ContextMenuAction) => {
-      if (payload.action === "remind-me" && payload.remindAt) {
-        const typePrefix = payload.context.itemType === "pr" 
-          ? "PR: " 
-          : payload.context.itemType === "ticket" 
-          ? "Ticket: " 
-          : "Doc: ";
-        
-        invoke("reminders:create", {
-          title: `${typePrefix}${payload.context.title}`,
-          comment: "",
-          sourceUrl: payload.context.url || null,
-          remindAt: payload.remindAt,
-        }).catch((err) => {
-          console.error("Failed to create reminder:", err);
-        });
-      }
-    });
-
-    return cleanup;
-  }, []);
 
   useEffect(() => {
     localStorage.setItem("devdash.lookbackDays", lookbackDays.toString());

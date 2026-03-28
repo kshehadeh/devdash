@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, useLocation } from "react-router-dom";
-import { Bell, ClipboardCheck, LayoutDashboard, Settings, AlarmClock, Sun, Users } from "lucide-react";
+import { Bell, ClipboardCheck, LayoutDashboard, Search, Settings, AlarmClock, Sun, Users } from "lucide-react";
 import { clsx } from "clsx";
 import { useEffect, useState, useCallback } from "react";
 import appIcon from "@/assets/icon-white.png";
@@ -18,9 +18,11 @@ const navItems = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onOpenCommandPalette }: { onOpenCommandPalette: () => void }) {
   const { pathname } = useLocation();
   const [triggeredCount, setTriggeredCount] = useState(0);
+  const isMac = typeof window !== "undefined" && window.electron.platform === "darwin";
+  const shortcutTitle = isMac ? "⌘K" : "Ctrl+K";
 
   const loadCount = useCallback(async () => {
     try {
@@ -44,8 +46,41 @@ export function Sidebar() {
 
   return (
     <aside className="flex flex-col w-16 shrink-0 bg-[var(--surface-container-low)] h-full py-4 items-center gap-1">
-      <div className="mb-4 flex items-center justify-center w-9 h-9">
+      <div className="mb-2 flex items-center justify-center w-9 h-9">
         <img src={appIcon} alt="DevDash" className="w-full h-full object-contain" />
+      </div>
+
+      <div className="mb-2 flex w-full flex-col items-center gap-1 px-1.5">
+        <button
+          type="button"
+          onClick={onOpenCommandPalette}
+          title={`Search (${shortcutTitle})`}
+          aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"}
+          className={clsx(
+            "flex h-10 w-full items-center justify-center rounded-md transition-colors",
+            "text-[var(--on-surface-variant)] hover:bg-[var(--surface-container)] hover:text-[var(--on-surface)]",
+          )}
+        >
+          <Search size={18} strokeWidth={2} aria-hidden />
+        </button>
+        <div className="flex max-w-full items-center justify-center gap-0.5" aria-hidden>
+          <kbd
+            className={clsx(
+              "rounded border border-[var(--outline-variant)]/50 bg-[var(--surface-container-highest)] px-1 py-px",
+              "font-mono text-[8px] font-medium leading-none text-[var(--on-surface-variant)]",
+            )}
+          >
+            {isMac ? "⌘" : "Ctrl"}
+          </kbd>
+          <kbd
+            className={clsx(
+              "min-w-[14px] rounded border border-[var(--outline-variant)]/50 bg-[var(--surface-container-highest)] px-1 py-px text-center",
+              "font-mono text-[8px] font-medium leading-none text-[var(--on-surface-variant)]",
+            )}
+          >
+            K
+          </kbd>
+        </div>
       </div>
 
       <nav className="flex flex-col gap-1 flex-1 w-full px-2">
