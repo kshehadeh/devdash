@@ -221,3 +221,7 @@ Native Electron notifications trigger when reminders are due. Clicking the notif
 - Manual sync button in Reminders page settings
 - Recurring reminders support
 - Reminder templates for common scenarios (standup, review PR, follow-up)
+
+## See also
+
+- [Features](./features.md) — **My Day** surfaces triggered reminders; **command palette** can search `reminders` by title

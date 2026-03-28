@@ -90,6 +90,8 @@ flowchart TB
 
 **Routing** from “active provider” → “which connection row to load” is centralized in [`electron/integrations/connection-routing.ts`](../electron/integrations/connection-routing.ts). [`needsAtlassianConnection`](../electron/integrations/connection-routing.ts) is true when either work is Jira or docs is Confluence, so a single Atlassian credential can still serve both products.
 
+**GitHub auth gates (API / sync):** Prefer [`hasUsableToken(conn)`](../electron/db/connections.ts) over `conn.connected && conn.token` when deciding whether to call GitHub. The `connected` column can be out of sync with a still-valid encrypted token; the helper treats a non-empty **decrypted** token as authoritative.
+
 ---
 
 ## Sync registry and tasks
@@ -121,6 +123,8 @@ sequenceDiagram
   end
   Eng->>Eng: pruneStaleData
 ```
+
+**`sync:trigger` IPC** ([`electron/ipc/sync.ts`](../electron/ipc/sync.ts)): with `{ developerId }`, runs [`syncDeveloper`](../electron/sync/engine.ts) for that id (single-developer scope). With **no** `developerId`, runs **`syncAll()`** for every developer. The renderer status bar uses this split so users can refresh from any view.
 
 After a full `syncAll`, [`pruneStaleData()`](../electron/sync/engine.ts) applies **time-based cleanup** per cache table (and removes orphans when developers are deleted). New provider caches must be wired into that prune list when added.
 
@@ -166,11 +170,24 @@ Stats handlers resolve context via [`getStatsContext`](../electron/ipc/stats-con
 | Channel | Payload focus |
 |---------|----------------|
 | `stats:code` | Commits, PRs, effort (alias: `stats:github`) |
-| `stats:velocity` | PR-based velocity / merge ratio (GitHub-only when code = GitHub) |
+| `stats:velocity` | PR-based velocity / merge ratio / review turnaround (GitHub-only when code = GitHub) |
 | `stats:work` | Tickets / issues (alias: `stats:tickets`) |
 | `stats:docs` | Documentation stats (alias: `stats:confluence`) |
+| `stats:review-comments` | Cached PR review comments aggregated by day |
+| `stats:team-overview` | All developers — velocity, tickets, cached GitHub review counts (`{ days }`) |
+| `stats:weekly-report-markdown` | Single Markdown string for a developer + lookback (`{ developerId, days }`) |
+| `reviews:get` | GitHub review queue + “on your PRs” lists from cache (`{ developerId }`) — see [`features.md`](./features.md) |
+| `search:global` | Command palette: nav + SQLite search over PRs, tickets, reminders, notifications (`{ developerId, query, limit? }`) — [`electron/ipc/search.ts`](../electron/ipc/search.ts) |
 
 Discovery follows the same product split, e.g. `discover:github:*`, `discover:jira:*`, `discover:confluence:*`, `discover:linear:teams`.
+
+---
+
+## Shell UI (status bar, command palette, global dev selection)
+
+The main app layout (`src/App.tsx`) wraps authenticated routes with **`SelectedDeveloperProvider`** so **My Day**, **Dashboard**, **Reviews**, and the **status bar** share the same `selectedDevId`. The **command palette** receives that id for `search:global`. Technical detail: [`features.md`](./features.md).
+
+The **status bar** (`src/components/layout/StatusBar.tsx`) shows sync progress from `onSyncProgress`, last-sync text from `sync:status`, optional toast chips, and a **Sync** button that calls `sync:trigger` as described above.
 
 ---
 
@@ -191,3 +208,11 @@ Menu-driven export/import ([`electron/ipc/settings-io.ts`](../electron/ipc/setti
 7. Update **Connections** UI for new credentials.
 
 This matches the plan’s intent: **categories stay stable**, **providers plug in** behind explicit sync/cache/stats/discovery wiring, and the **renderer stays oriented to Code / Work / Docs** with `providerId` used mainly for labels, links, and empty states.
+
+---
+
+## See also
+
+- [Features](./features.md) — My Day, Team, command palette, dashboard layout, weekly report, reviews IPC, status bar sync
+- [Database](./database.md) — schema, `config` keys, migrations
+- [Metrics](./metrics.md) — dashboard metric definitions

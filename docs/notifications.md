@@ -144,6 +144,7 @@ Renderer receives push events via preload:
 ## Current built-in notification types
 
 - GitHub: `review_requested`
+- GitHub: `github_stale_pr` — open **authored** PRs with **no reviews** yet and age from creation past warn/danger thresholds (uses cached PRs; thresholds via `pr_stale_warn_days` / `pr_stale_danger_days`)
 - Jira: `assigned_or_watched_ticket_updated`
 - Confluence: `page_activity`
 
@@ -152,3 +153,11 @@ Renderer receives push events via preload:
 - Native notifications may appear as “Electron” in local dev; packaged builds use app bundle identity.
 - Menu currently requests up to 50 notifications and uses internal scrolling for long lists.
 - Fingerprint strategy metadata is persisted so strategy evolution can be managed safely over time.
+
+Stale PR thresholds (`pr_stale_warn_days` / `pr_stale_danger_days`) are documented with other `config` keys in [database.md](./database.md). The dashboard PR list uses the same default ages (3d / 7d) for visual staleness; see [metrics.md](./metrics.md).
+
+---
+
+## See also
+
+- [Features](./features.md) — My Day / Reviews / command palette integration with notifications data

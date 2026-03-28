@@ -35,6 +35,19 @@ Implemented in `src/components/dashboard/MetricsBar.tsx`; data from `buildVeloci
 
 ---
 
+### Review turnaround (GitHub only)
+
+**What the UI shows:** Mean time from **PR creation** to **first submitted review** (hours), or **—** when unknown.
+
+| Path | Mechanism |
+|------|-----------|
+| **Fresh cache** | `computeCachedReviewTurnaroundHours` in `electron/db/cache.ts`: averages `(first_review_submitted_at - created_at)` in hours for rows in `cached_pull_requests` in the lookback with non-null `first_review_submitted_at`. |
+| **No / stale cache** | `0` / empty (live velocity path does not compute this without a reviews crawl). |
+
+**Population:** `electron/sync/github-sync.ts` fetches **`GET /repos/.../pulls/{n}/reviews`** for each PR in the incremental batch and stores the earliest `submitted_at` in **`first_review_submitted_at`** (migration v20).
+
+---
+
 ### Merge ratio (GitHub only)
 
 **Definition:** Among PRs **authored** by the developer with **`created` in the lookback window**, what percentage **merged** (have a merge time / merged state in our model).
@@ -147,7 +160,7 @@ If docs integration is not Confluence or lists are empty, level is still at leas
 
 ---
 
-## GitHub panel (contributions, PR list, effort split)
+## GitHub panel (contributions, PR list)
 
 Served by `stats:code` / `buildGithubStats`.
 
@@ -160,20 +173,12 @@ Served by `stats:code` / `buildGithubStats`.
 
 ### Pull request list (last N in lookback)
 
-- **Cache:** `getCachedPullRequests`: `cached_pull_requests` where `developer_id` + `created_at >= since` (+ repo filter), order `updated_at DESC`, **limit 15**. Maps `title`, `repo`, `pr_number`, `status`, `review_count`, `updated_at`.
-- **Live:** `fetchPullRequests`: three **`/search/issues`** queries (open / merged / closed unmerged) with `created:>=<date>` and `repo:` filters, **per_page=10** each, merged/deduped, then **slice(15)**. Open PRs may refresh `reviewCount` via **`GET /repos/{owner}/{repo}/pulls/{n}/reviews`**.
+- **Cache:** `getCachedPullRequests`: `cached_pull_requests` where `developer_id` + `created_at >= since` (+ repo filter), order `updated_at DESC`, **limit 15**. Maps `title`, `repo`, `pr_number`, `status`, `review_count`, `created_at`, `updated_at`, `merged_at`, `first_review_submitted_at`.
+- **Live:** `fetchPullRequests`: three **`/search/issues`** queries (open / merged / closed unmerged) with `created:>=<date>` and `repo:` filters, **per_page=10** each, merged/deduped, then **slice(15)**. Includes `created_at` and merged time from search items; `first_review_submitted_at` is **null** until cache sync runs.
 
 **Search item fields used:** `title`, `number`, `html_url`, `updated_at`, `created_at`, `state`, `repository_url`, `review_comments`, `requested_reviewers`, `merged_at` / `pull_request.merged_at` for status.
 
-### Effort distribution (feature / bug / review)
-
-- **Function:** `classifyEffortDistribution` (`electron/services/github.ts`) on the **same PR list** as above (up to **15** titles).
-- **Rules (case-insensitive title):**
-  - **Bug fix:** title matches `\b(fix|bug|patch|hotfix|issue|error|crash|broken)\b`.
-  - Else if title matches `\b(review|refactor|cleanup|lint|style|format|rename|chore|ci|test)\b` → counted as **code review** bucket (remainder).
-  - Else → **feature**.
-- **Percentages:** Rounded percents; **code review** = `100 - feature% - bugFix%` (minimum 0).
-- **No PRs:** Returns placeholder split **34 / 33 / 33**.
+**Dashboard PR list:** Open PRs with **zero reviews** and age from **created_at** ≥ **3d** show a warning tier; ≥ **7d** show danger (“Stale”). Thresholds for **notifications** are configurable via `pr_stale_warn_days` / `pr_stale_danger_days` in app config (defaults **3** / **7**).
 
 ---
 
@@ -210,6 +215,7 @@ Incremental syncs populate caches from the same vendor APIs; field mappings abov
 | Metric / area | Primary API |
 |---------------|-------------|
 | Velocity, merge ratio (live) | GitHub `GET https://api.github.com/search/issues` |
+| Review turnaround (cache) | GitHub `GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews` (during PR sync) |
 | Contributions | GitHub GraphQL `contributionsCollection` |
 | PR details / reviews | GitHub REST search + `pulls/{n}/reviews` |
 | Jira tickets & velocity | Jira Cloud `POST /rest/api/3/search/jql` |
@@ -217,3 +223,9 @@ Incremental syncs populate caches from the same vendor APIs; field mappings abov
 | Confluence docs / activity | Confluence REST `content/search` (+ optional analytics views) |
 
 For new integrations or parity work, align **time field** (created vs. updated), **“done” semantics** (Jira category vs. Linear state type including canceled), and **author/assignee identity** (GitHub login, Jira accountId, Linear assignee email) with the tables above.
+
+---
+
+## See also
+
+- [Features](./features.md) — **Team** and **weekly Markdown report** reuse these metrics via `stats:team-overview` and `stats:weekly-report-markdown`

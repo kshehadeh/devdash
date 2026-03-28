@@ -107,7 +107,18 @@ Current schema evolves over migrations, but conceptually it is grouped as:
 ### Core app and configuration
 
 - `developers`: tracked people and identity fields
-- `config`: app-level settings
+- `config`: app-level string settings (key/value). The renderer may only read/write keys allow-listed in [`electron/ipc/app-config.ts`](../electron/ipc/app-config.ts):
+
+  | Key | Purpose |
+  |-----|---------|
+  | `onboarding_completed` | `"1"` when first-run onboarding finished |
+  | `auto_update_enabled` | Auto-update preference |
+  | `notifications_enabled` | Master switch for integration notification polling |
+  | `notifications_poll_interval_ms` | Poll interval for notification service |
+  | `pr_stale_warn_days` | Integer — authored open PR with zero reviews: warn tier age (days from creation); used by `github_stale_pr` notifications and dashboard PR list styling |
+  | `pr_stale_danger_days` | Integer — same, danger tier |
+  | `dashboard_widget_layout_json` | JSON array of dashboard widget ids (order + visibility); see [`features.md`](./features.md) |
+
 - `integration_settings`: selected provider per category (`code`, `work`, `docs`)
 - `developer_integration_identity`: per-developer/category identity payloads
 
@@ -123,7 +134,7 @@ Current schema evolves over migrations, but conceptually it is grouped as:
 
 ### Provider cache tables
 
-- GitHub: `cached_contributions`, `cached_pull_requests`, `cached_review_requests`
+- GitHub: `cached_contributions`, `cached_pull_requests` (includes `first_review_submitted_at` as of migration **v20**), `cached_review_requests`
 - Jira: `cached_jira_tickets` — stale/deleted tickets are removed by two mechanisms: (1) a daily reconciliation pass (`reconcileJiraTickets` in `electron/sync/atlassian-sync.ts`) that diffs live Jira issue keys against the cache and deletes any that no longer exist; and (2) on-demand validation triggered when a user clicks a ticket link (`jira:ticket:validate` IPC handler in `electron/ipc/reference.ts`), which calls the Jira single-issue endpoint and removes the row immediately if it returns 404.
 - Confluence: `cached_confluence_pages`
 - Linear: `cached_linear_issues`
@@ -165,5 +176,7 @@ This compiles Electron DB code and runs all migrations against a fresh temporary
 ## Related docs
 
 - Architecture overview: `docs/architecture.md`
+- Cross-cutting features (My Day, Team, search, layout): `docs/features.md`
 - Metrics definitions: `docs/metrics.md`
 - Notifications system: `docs/notifications.md`
+- Product roadmap: `docs/roadmap.md`
