@@ -20,6 +20,14 @@ esac
 VERSION="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${VERSION}"
 
+PREV_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+if [[ -n "$PREV_TAG" ]]; then
+  echo ""
+  echo "Commits since ${PREV_TAG} (will be included in GitHub release notes):"
+  git log --no-merges --pretty=format:'  - %s (%h)' "${PREV_TAG}..HEAD" || true
+  echo ""
+fi
+
 # Write new version directly into package.json
 node -e "
 const fs = require('fs');
