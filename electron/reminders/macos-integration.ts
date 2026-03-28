@@ -216,17 +216,21 @@ export async function deleteMacOSReminder(title: string, listName = "DevDash"): 
   
   const script = `
     tell application "Reminders"
+      if not (exists list "${escapedList}") then
+        return
+      end if
+      
       tell list "${escapedList}"
-        set theReminders to (every reminder whose name is "${escapedTitle}")
-        repeat with aReminder in theReminders
-          delete aReminder
-        end repeat
+        set matchedReminders to (every reminder whose name is "${escapedTitle}")
+        if (count of matchedReminders) > 0 then
+          delete item 1 of matchedReminders
+        end if
       end tell
     end tell
   `;
 
   try {
-    await execAppleScript(script);
+    await execAppleScript(script, 10000);
   } catch (err) {
     console.error("Failed to delete macOS reminder:", err);
   }

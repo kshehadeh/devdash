@@ -185,3 +185,9 @@ export function markReminderSyncedToMacOS(id: string, synced: boolean): boolean 
   ).run(synced ? 1 : 0, id);
   return result.changes > 0;
 }
+
+export function deleteReminder(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare("DELETE FROM reminders WHERE id = ?").run(id);
+  return result.changes > 0;
+}

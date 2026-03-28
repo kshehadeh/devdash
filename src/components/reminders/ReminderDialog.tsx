@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import { invoke } from "@/lib/api";
 import type { ReminderRecord } from "@/lib/types";
 
@@ -12,6 +12,7 @@ interface ReminderDialogProps {
   initialSourceUrl?: string;
   onClose: () => void;
   onSave: () => void;
+  onDelete?: () => void;
 }
 
 export function ReminderDialog({
@@ -21,6 +22,7 @@ export function ReminderDialog({
   initialSourceUrl,
   onClose,
   onSave,
+  onDelete,
 }: ReminderDialogProps) {
   const isEdit = !!reminder;
   const [title, setTitle] = useState(reminder?.title || initialTitle || "");
@@ -36,6 +38,7 @@ export function ReminderDialog({
     return tomorrow.toISOString().slice(0, 16);
   });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function handleSave() {
     if (!title.trim() || !remindAt) return;
@@ -65,6 +68,21 @@ export function ReminderDialog({
       console.error("Failed to save reminder:", err);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!isEdit || !reminder) return;
+    if (!confirm("Are you sure you want to delete this reminder?")) return;
+
+    setDeleting(true);
+    try {
+      await invoke("reminders:delete", { id: reminder.id });
+      onDelete?.();
+    } catch (err) {
+      console.error("Failed to delete reminder:", err);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -139,20 +157,34 @@ export function ReminderDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--outline-variant)]/20">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-label text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => void handleSave()}
-            disabled={!title.trim() || !remindAt || saving}
-            className="px-4 py-2 rounded-md bg-[var(--primary)] text-[var(--on-primary)] text-sm font-label hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {saving ? "Saving..." : isEdit ? "Update" : "Create"}
-          </button>
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--outline-variant)]/20">
+          <div>
+            {isEdit && (
+              <button
+                onClick={() => void handleDelete()}
+                disabled={deleting || saving}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-label text-[var(--error)] hover:bg-[var(--error)]/10 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={14} />
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-label text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleSave()}
+              disabled={!title.trim() || !remindAt || saving || deleting}
+              className="px-4 py-2 rounded-md bg-[var(--primary)] text-[var(--on-primary)] text-sm font-label hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? "Saving..." : isEdit ? "Update" : "Create"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

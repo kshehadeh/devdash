@@ -1,5 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 
+export interface ContextMenuContext {
+  title: string;
+  url: string | null;
+  itemType: "pr" | "ticket" | "doc";
+}
+
+export interface ContextMenuAction {
+  action: string;
+  context: ContextMenuContext;
+  remindAt?: string;
+}
+
 declare global {
   interface Window {
     electron: {
@@ -12,6 +24,7 @@ declare global {
       onNotificationsChanged: (callback: () => void) => () => void;
       onRemindersChanged: (callback: () => void) => () => void;
       onReminderNavigate: (callback: (payload: { id: string }) => void) => () => void;
+      onContextMenuAction: (callback: (payload: ContextMenuAction) => void) => () => void;
     };
   }
 }

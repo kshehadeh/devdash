@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Settings2, Edit2, BellOff, X } from "lucide-react";
+import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Settings2, Edit2, BellOff, X, Trash2 } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
 import type { ReminderRecord, RemindersListResponse, ReminderStatus } from "@/lib/types";
@@ -149,6 +149,12 @@ export default function RemindersPage() {
   async function handleSnooze(id: string, snoozedUntil: string) {
     await invoke("reminders:snooze", { id, snoozedUntil });
     setSnoozeReminderId(null);
+    void load();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to delete this reminder?")) return;
+    await invoke("reminders:delete", { id });
     void load();
   }
 
@@ -315,57 +321,66 @@ export default function RemindersPage() {
                     key={reminder.id}
                     className="rounded-md border border-[var(--outline-variant)]/20 bg-[var(--surface-container)] p-4"
                   >
-                    <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {reminder.sourceUrl ? (
-                          <a
-                            href={reminder.sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-semibold text-[var(--primary)] hover:underline truncate flex items-center gap-1"
-                          >
-                            {reminder.title}
-                            <ExternalLink size={12} />
-                          </a>
-                        ) : (
-                          <h3 className="text-sm font-semibold text-[var(--on-surface)] truncate">
-                            {reminder.title}
-                          </h3>
-                        )}
-                        <span
-                          className={clsx(
-                            "text-[10px] font-label capitalize px-1.5 py-0.5 rounded shrink-0",
-                            statusBadgeClass(reminder.status),
+                        <div className="flex items-center gap-2 mb-1">
+                          {reminder.sourceUrl ? (
+                            <a
+                              href={reminder.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-semibold text-[var(--primary)] hover:underline truncate flex items-center gap-1"
+                            >
+                              {reminder.title}
+                              <ExternalLink size={12} />
+                            </a>
+                          ) : (
+                            <h3 className="text-sm font-semibold text-[var(--on-surface)] truncate">
+                              {reminder.title}
+                            </h3>
                           )}
-                        >
-                          {reminder.status}
-                        </span>
+                          <span
+                            className={clsx(
+                              "text-[10px] font-label capitalize px-1.5 py-0.5 rounded shrink-0",
+                              statusBadgeClass(reminder.status),
+                            )}
+                          >
+                            {reminder.status}
+                          </span>
+                        </div>
+                        {reminder.comment && (
+                          <p className="text-xs text-[var(--on-surface-variant)] mb-2 flex items-start gap-1.5">
+                            <MessageSquare size={12} className="mt-0.5 shrink-0" />
+                            <span className="line-clamp-2">{reminder.comment}</span>
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-[10px] font-label text-[var(--on-surface-variant)]/60">
+                          <span className="flex items-center gap-1">
+                            <Clock size={10} />
+                            {formatRemindAt(reminder.remindAt)} · {formatDateTime(reminder.remindAt)}
+                          </span>
+                        </div>
                       </div>
-                      {reminder.comment && (
-                        <p className="text-xs text-[var(--on-surface-variant)] mb-2 flex items-start gap-1.5">
-                          <MessageSquare size={12} className="mt-0.5 shrink-0" />
-                          <span className="line-clamp-2">{reminder.comment}</span>
-                        </p>
-                      )}
-                      <div className="flex items-center gap-3 text-[10px] font-label text-[var(--on-surface-variant)]/60">
-                        <span className="flex items-center gap-1">
-                          <Clock size={10} />
-                          {formatRemindAt(reminder.remindAt)} · {formatDateTime(reminder.remindAt)}
-                        </span>
-                      </div>
-                    </div>
                       <div className="flex items-center gap-1 shrink-0">
                         {reminder.status !== "dismissed" && (
                           <>
                             {reminder.status === "pending" && !isPastDue && (
-                              <button
-                                onClick={() => openEditDialog(reminder)}
-                                className="p-2 rounded-md hover:bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors"
-                                title="Edit reminder"
-                              >
-                                <Edit2 size={14} />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => openEditDialog(reminder)}
+                                  className="p-2 rounded-md hover:bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-colors"
+                                  title="Edit reminder"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button
+                                  onClick={() => void handleDelete(reminder.id)}
+                                  className="p-2 rounded-md hover:bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--error)] transition-colors"
+                                  title="Delete reminder"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
                             )}
                             {isPastDue && (
                               <div className="relative">
@@ -414,6 +429,11 @@ export default function RemindersPage() {
             setEditingReminder(null);
           }}
           onSave={() => {
+            setDialogOpen(false);
+            setEditingReminder(null);
+            void load();
+          }}
+          onDelete={() => {
             setDialogOpen(false);
             setEditingReminder(null);
             void load();

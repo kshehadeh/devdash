@@ -13,6 +13,7 @@ import { registerUpdateHandlers } from "./updates";
 import { registerNotificationHandlers } from "./notifications";
 import { registerReminderHandlers } from "./reminders";
 import { registerDevToolsHandlers } from "./dev-tools";
+import { registerContextMenuHandlers } from "./context-menu";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
@@ -20,6 +21,7 @@ export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerUpdateHandlers();
   registerNotificationHandlers(getWindow);
   registerReminderHandlers(getWindow);
+  registerContextMenuHandlers(getWindow);
   registerDeveloperHandlers();
   registerConnectionHandlers();
   registerIntegrationHandlers();

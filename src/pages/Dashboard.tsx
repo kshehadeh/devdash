@@ -10,7 +10,7 @@ import { PullRequestList } from "@/components/dashboard/PullRequestList";
 import { ConfluenceSection } from "@/components/dashboard/ConfluenceSection";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
 import { TriggeredRemindersBanner } from "@/components/reminders/TriggeredRemindersBanner";
-import { invoke, useIpc } from "@/lib/api";
+import { invoke, useIpc, type ContextMenuAction } from "@/lib/api";
 import { useAppStatus } from "@/context/AppStatusContext";
 import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import type {
@@ -40,6 +40,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { syncing, refreshSyncStatus } = useAppStatus();
+
+  // Global context menu action listener
+  useEffect(() => {
+    const cleanup = window.electron.onContextMenuAction((payload: ContextMenuAction) => {
+      if (payload.action === "remind-me" && payload.remindAt) {
+        const typePrefix = payload.context.itemType === "pr" 
+          ? "PR: " 
+          : payload.context.itemType === "ticket" 
+          ? "Ticket: " 
+          : "Doc: ";
+        
+        invoke("reminders:create", {
+          title: `${typePrefix}${payload.context.title}`,
+          comment: "",
+          sourceUrl: payload.context.url || null,
+          remindAt: payload.remindAt,
+        }).catch((err) => {
+          console.error("Failed to create reminder:", err);
+        });
+      }
+    });
+
+    return cleanup;
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("devdash.lookbackDays", lookbackDays.toString());

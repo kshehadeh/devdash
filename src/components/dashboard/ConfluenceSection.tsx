@@ -1,6 +1,7 @@
 "use client";
 
 import { FileEdit, MessageSquare } from "lucide-react";
+import { useContextMenu } from "@/hooks/useContextMenu";
 import type { ConfluenceDoc, ConfluenceActivity } from "../../../lib/types";
 
 interface ConfluenceSectionProps {
@@ -11,6 +12,25 @@ interface ConfluenceSectionProps {
 export function ConfluenceSection({ docs, activity }: ConfluenceSectionProps) {
   const totalEdits = docs.reduce((sum, d) => sum + d.edits, 0);
   const maxEdits = Math.max(...docs.map((d) => d.edits), 1);
+  const { showContextMenu } = useContextMenu();
+
+  const handleDocContextMenu = (e: React.MouseEvent, doc: ConfluenceDoc) => {
+    e.preventDefault();
+    showContextMenu({
+      title: doc.title,
+      url: doc.url || null,
+      itemType: "doc",
+    });
+  };
+
+  const handleActivityContextMenu = (e: React.MouseEvent, item: ConfluenceActivity) => {
+    e.preventDefault();
+    showContextMenu({
+      title: item.description,
+      url: item.url || null,
+      itemType: "doc",
+    });
+  };
 
   return (
     <div>
@@ -31,6 +51,7 @@ export function ConfluenceSection({ docs, activity }: ConfluenceSectionProps) {
               <span
                 className={`text-sm text-[var(--on-surface)] leading-snug ${doc.url ? "cursor-pointer hover:text-[var(--primary)] hover:underline transition-colors" : ""}`}
                 onClick={() => doc.url && window.open(doc.url)}
+                onContextMenu={(e) => handleDocContextMenu(e, doc)}
               >{doc.title}</span>
               <span className="text-xs font-label text-[var(--on-surface-variant)] shrink-0 ml-2">
                 {doc.reads > 0
@@ -59,6 +80,7 @@ export function ConfluenceSection({ docs, activity }: ConfluenceSectionProps) {
               key={i}
               className={`flex items-center gap-3 ${item.url ? "cursor-pointer hover:opacity-70 transition-opacity" : ""}`}
               onClick={() => item.url && window.open(item.url)}
+              onContextMenu={(e) => handleActivityContextMenu(e, item)}
             >
               <div className="w-6 h-6 rounded-md bg-[var(--surface-container-highest)] flex items-center justify-center shrink-0">
                 {item.type === "edit" ? (

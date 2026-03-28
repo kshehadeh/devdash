@@ -8,6 +8,7 @@ import {
   updateReminder,
   updateReminderStatus,
   markReminderSyncedToMacOS,
+  deleteReminder,
   type CreateReminderInput,
   type ListRemindersOptions,
   type ReminderStatus,
@@ -16,7 +17,7 @@ import {
 import { getCurrentUserDeveloper } from "../db/developers";
 import { emitRemindersChanged, onRemindersChanged } from "../reminders/events";
 import { getConfig, setConfig } from "../db/config";
-import { isMacOSRemindersAvailable, completeMacOSReminder, createMacOSReminder } from "../reminders/macos-integration";
+import { isMacOSRemindersAvailable, completeMacOSReminder, createMacOSReminder, deleteMacOSReminder } from "../reminders/macos-integration";
 import { manualSyncFromMacOS } from "../reminders/scheduler";
 
 function currentUserId(): string | null {
@@ -105,6 +106,31 @@ export function registerReminderHandlers(getWindow: () => BrowserWindow | null) 
 
     const success = updateReminderStatus(data.id, "snoozed", data.snoozedUntil);
     if (success) emitRemindersChanged();
+    return { success };
+  });
+
+  ipcMain.handle("reminders:delete", async (_e, data: { id: string }) => {
+    if (!data?.id || typeof data.id !== "string") throw new Error("Invalid reminder id");
+
+    // Get the reminder before deleting to sync with macOS
+    const reminder = getReminderById(data.id);
+    const success = deleteReminder(data.id);
+    
+    if (success) {
+      emitRemindersChanged();
+      
+      // If macOS sync is enabled and reminder exists, delete it from macOS Reminders
+      const syncToMacOS = getConfig("reminders_sync_macos") === "1";
+      if (syncToMacOS && reminder && process.platform === "darwin") {
+        try {
+          await deleteMacOSReminder(reminder.title);
+        } catch (err) {
+          console.error("Failed to delete macOS reminder:", err);
+          // Don't fail the delete operation if macOS sync fails
+        }
+      }
+    }
+    
     return { success };
   });
 

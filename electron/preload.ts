@@ -1,5 +1,17 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+interface ContextMenuContext {
+  title: string;
+  url: string | null;
+  itemType: "pr" | "ticket" | "doc";
+}
+
+interface ContextMenuAction {
+  action: string;
+  context: ContextMenuContext;
+  remindAt?: string;
+}
+
 contextBridge.exposeInMainWorld("electron", {
   platform: process.platform,
   invoke: <T = unknown>(channel: string, ...args: unknown[]): Promise<T> =>
@@ -47,6 +59,13 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.on("reminders:navigate", handler);
     return () => {
       ipcRenderer.removeListener("reminders:navigate", handler);
+    };
+  },
+  onContextMenuAction: (callback: (payload: ContextMenuAction) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ContextMenuAction) => callback(payload);
+    ipcRenderer.on("context-menu:action", handler);
+    return () => {
+      ipcRenderer.removeListener("context-menu:action", handler);
     };
   },
 });

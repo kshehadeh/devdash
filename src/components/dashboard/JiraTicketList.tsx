@@ -4,6 +4,7 @@ import type React from "react";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "../ui/Badge";
 import { invoke } from "@/lib/api";
+import { useContextMenu } from "@/hooks/useContextMenu";
 import type { JiraTicket } from "../../../lib/types";
 
 interface JiraTicketListProps {
@@ -25,12 +26,23 @@ const categoryBadge: Record<JiraTicket["statusCategory"], React.ReactElement> = 
 };
 
 export function JiraTicketList({ tickets, onInvalidTicket }: JiraTicketListProps) {
+  const { showContextMenu } = useContextMenu();
+
   function handleTicketClick(ticket: JiraTicket) {
     if (!ticket.developerId) return;
     invoke<{ exists: boolean }>("jira:ticket:validate", { issueKey: ticket.key, developerId: ticket.developerId })
       .then((result: { exists: boolean }) => { if (!result.exists) onInvalidTicket?.(ticket.key); })
       .catch(() => { /* ignore validation errors */ });
   }
+
+  const handleContextMenu = (e: React.MouseEvent, ticket: JiraTicket) => {
+    e.preventDefault();
+    showContextMenu({
+      title: `${ticket.key}: ${ticket.title}`,
+      url: ticket.url,
+      itemType: "ticket",
+    });
+  };
 
   if (tickets.length === 0) {
     return (
@@ -49,6 +61,7 @@ export function JiraTicketList({ tickets, onInvalidTicket }: JiraTicketListProps
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => handleTicketClick(ticket)}
+          onContextMenu={(e) => handleContextMenu(e, ticket)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--surface-container-high)] transition-colors group"
         >
           <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${priorityDot[ticket.priority]}`} />

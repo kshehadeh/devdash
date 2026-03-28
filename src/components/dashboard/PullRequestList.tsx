@@ -2,6 +2,7 @@
 
 import { GitMerge, MessageCircle, ChevronRight, AlertTriangle } from "lucide-react";
 import { Badge } from "../ui/Badge";
+import { useContextMenu } from "@/hooks/useContextMenu";
 import type { PullRequest } from "../../../lib/types";
 
 interface PullRequestListProps {
@@ -30,12 +31,22 @@ const statusConfig = {
 
 export function PullRequestList({ prs }: PullRequestListProps) {
   const visible = prs.filter((pr) => pr.status !== "closed");
+  const { showContextMenu } = useContextMenu();
 
   if (visible.length === 0) {
     return (
       <p className="text-sm text-[var(--on-surface-variant)] py-3">No open or merged pull requests.</p>
     );
   }
+
+  const handleContextMenu = (e: React.MouseEvent, pr: PullRequest) => {
+    e.preventDefault();
+    showContextMenu({
+      title: pr.title,
+      url: pr.url,
+      itemType: "pr",
+    });
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -50,6 +61,7 @@ export function PullRequestList({ prs }: PullRequestListProps) {
             href={pr.url}
             target="_blank"
             rel="noopener noreferrer"
+            onContextMenu={(e) => handleContextMenu(e, pr)}
             className={`flex items-center gap-3 px-3 py-3 rounded-md transition-colors cursor-pointer group ${
               stale
                 ? "bg-amber-400/8 border border-amber-400/20 hover:bg-amber-400/15"
