@@ -41,27 +41,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bun run electron:build:publish
 
-      # electron-builder creates the draft release without a body; GitHub’s API fills it from merged PRs.
-      # Baseline = latest GitHub release that is published (not draft) and not this tag — same idea as comparing tags on the server.
-      - name: Add GitHub-generated release notes
+      # electron-builder creates the draft release without a body; fill it from commits since the last published release.
+      - name: Add release notes (commits since last published release)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          PREV_TAG="$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
-            --jq --arg cur "${GITHUB_REF_NAME}" \
-            '[.[] | select(.draft == false and .tag_name != $cur)] | first | .tag_name // empty')"
-          GEN="repos/${{ github.repository }}/releases/generate-notes"
-          PREV_FIELD=()
-          if [[ -n "${PREV_TAG}" ]]; then
-            echo "Comparing ${GITHUB_REF_NAME} to previous published release tag: ${PREV_TAG}"
-            PREV_FIELD=( -f "previous_tag_name=${PREV_TAG}" )
-          else
-            echo "No earlier published release found; GitHub will choose the default baseline for generate-notes."
-          fi
-          # gh api requires <endpoint> as the first argument (not --method POST).
-          gh api "${GEN}" --method POST \
-            -f "tag_name=${GITHUB_REF_NAME}" \
-            "${PREV_FIELD[@]}" \
-            --jq '.body' > release-notes.md
-          gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.md
+        run: bash scripts/attach-github-release-notes.sh
