@@ -1,4 +1,4 @@
-import { syncContributions, syncPullRequests, syncPRReviewComments } from "../sync/github-sync";
+import { syncContributions, syncPullRequests, syncPRReviewComments, syncPRApprovalsGiven } from "../sync/github-sync";
 import { syncJiraTickets, syncConfluencePages } from "../sync/atlassian-sync";
 import { syncLinearIssues } from "../sync/linear-sync";
 import { getIntegrationSettings } from "../db/integration-settings";
@@ -36,10 +36,17 @@ const ALL_TASKS: TaskDef[] = [
   },
   {
     id: "github_pr_review_comments",
-    label: "GitHub PR review comments",
+    label: "GitHub PR comments (yours & received)",
     category: "code",
     provider: "github",
     run: syncPRReviewComments,
+  },
+  {
+    id: "github_pr_approvals_given",
+    label: "GitHub PR approvals",
+    category: "code",
+    provider: "github",
+    run: syncPRApprovalsGiven,
   },
   {
     id: "jira_tickets",

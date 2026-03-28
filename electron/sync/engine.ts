@@ -226,11 +226,18 @@ function pruneStaleData(): void {
     const r6 = db.prepare("DELETE FROM cached_pr_review_comments WHERE created_at < ?").run(cutoff);
     totalDeleted += r6.changes;
 
+    // 6b. Prune PR approvals and received-comment cache older than 1 year
+    const r6b = db.prepare("DELETE FROM cached_pr_approvals_given WHERE submitted_at < ?").run(cutoff);
+    totalDeleted += r6b.changes;
+    const r6c = db.prepare("DELETE FROM cached_pr_comments_received WHERE created_at < ?").run(cutoff);
+    totalDeleted += r6c.changes;
+
     // 7. Remove orphaned cache data for deleted developers
     const orphanTables = [
       "cached_contributions", "cached_pull_requests", "cached_review_requests",
       "cached_jira_tickets", "cached_confluence_pages", "cached_linear_issues",
-      "cached_pr_review_comments", "sync_log",
+      "cached_pr_review_comments", "cached_pr_approvals_given", "cached_pr_comments_received",
+      "sync_log",
     ];
     for (const table of orphanTables) {
       const rows = db.prepare(`SELECT DISTINCT developer_id FROM ${table}`).all() as { developer_id: string }[];

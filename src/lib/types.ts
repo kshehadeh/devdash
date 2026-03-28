@@ -146,9 +146,14 @@ export interface ConfluenceStatsResponse {
 }
 
 export interface PRReviewCommentsResponse {
-  commentDays: CommitDay[];
-  totalComments: number;
-  _syncedAt?: string;
+  /** Inline PR review comments authored by the developer in the lookback window */
+  commentsGiven: number;
+  /** PR reviews with state APPROVED submitted by the developer in the lookback window */
+  approvalsGiven: number;
+  /** Inline + conversation comments from others on the developer’s PRs (cached authored PRs only) */
+  commentsReceived: number;
+  _syncedAtComments?: string;
+  _syncedAtApprovals?: string;
 }
 
 export interface TeamOverviewRow {

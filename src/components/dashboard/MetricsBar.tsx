@@ -114,7 +114,7 @@ export function MetricsBar({
             sub={rt <= 0 ? "no data" : "avg to 1st review"}
             subColor={rt <= 0 ? "text-[var(--on-surface-variant)]" : rt <= 48 ? "text-emerald-400" : rt <= 120 ? "text-[var(--primary)]" : "text-amber-400"}
             period={periodLabel}
-            description="Mean time from PR creation to first submitted review, for your PRs in this period that have at least one review (cached GitHub data after sync)."
+            description="Mean hours from PR creation to first submitted review, for PRs you opened in this period that have at least one review on GitHub. Comes from the local PR cache (filled when pull requests sync runs). You may see no data if none of your PRs in this window have reviews yet, or until sync has stored first-review times."
           />
         </>
       )}

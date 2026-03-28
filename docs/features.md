@@ -103,7 +103,7 @@ PR results include a GitHub `openUrl`; tickets from search currently navigate to
 
 **Allowed ids:** `DASHBOARD_WIDGET_IDS` in `src/lib/dashboard-widgets.ts`:
 
-`metrics_bar`, `triggered_reminders`, `pull_requests`, `open_tickets`, `commit_activity`, `pr_review_comments`, `documentation`
+`metrics_bar`, `triggered_reminders`, `pull_requests`, `open_tickets`, `commit_activity`, `pr_review_comments`, `pr_comments_received`, `documentation`
 
 **Parsing:** `parseDashboardLayoutJson` dedupes, drops unknown strings, falls back to default order if empty/invalid.
 

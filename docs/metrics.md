@@ -41,8 +41,8 @@ Implemented in `src/components/dashboard/MetricsBar.tsx`; data from `buildVeloci
 
 | Path | Mechanism |
 |------|-----------|
-| **Fresh cache** | `computeCachedReviewTurnaroundHours` in `electron/db/cache.ts`: averages `(first_review_submitted_at - created_at)` in hours for rows in `cached_pull_requests` in the lookback with non-null `first_review_submitted_at`. |
-| **No / stale cache** | `0` / empty (live velocity path does not compute this without a reviews crawl). |
+| **Fresh cache** | `computeCachedReviewTurnaroundHours` in `electron/db/cache.ts`: averages `(first_review_submitted_at - created_at)` in hours over rows in `cached_pull_requests` in the lookback with non-null `first_review_submitted_at` (only rows with valid timestamps count toward the average). |
+| **Stale / error cache** | Velocity and merge ratio may come from live GitHub search, but review turnaround is still read from SQLite when rows exist (same `computeCachedReviewTurnaroundHours`). If the DB has no qualifying PRs, the UI shows “no data”. |
 
 **Population:** `electron/sync/github-sync.ts` fetches **`GET /repos/.../pulls/{n}/reviews`** for each PR in the incremental batch and stores the earliest `submitted_at` in **`first_review_submitted_at`** (migration v20).
 
@@ -180,6 +180,20 @@ Served by `stats:code` / `buildGithubStats`.
 
 **Dashboard PR list:** Open PRs with **zero reviews** and age from **created_at** ≥ **3d** show a warning tier; ≥ **7d** show danger (“Stale”). Thresholds for **notifications** are configurable via `pr_stale_warn_days` / `pr_stale_danger_days` in app config (defaults **3** / **7**).
 
+### PR review activity and comments received (`stats:review-comments`)
+
+Served by `buildPRReviewCommentsStats` in `electron/ipc/stats.ts`. Counts use **`COUNT(*)`** in SQLite with `created_at` / `submitted_at >= periodStart` and optional **`repo IN (...)`** for assigned repos.
+
+| Field | Definition | Cache / API |
+|-------|------------|-------------|
+| **commentsGiven** | Inline **pull review comments** authored by the developer (`user.login` on each item) | `cached_pr_review_comments` from `GET /repos/{owner}/{repo}/pulls/comments?since=` (`syncPRReviewComments`) |
+| **approvalsGiven** | PR **reviews** with `state === APPROVED` and `user.login ===` developer | `cached_pr_approvals_given` from search `reviewed-by:<login> repo:… updated:>=…` then `GET /repos/.../pulls/{n}/reviews` (`syncPRApprovalsGiven`) |
+| **commentsReceived** | Comments **from others** on **PRs you authored** that appear in `cached_pull_requests` | `cached_pr_comments_received`: `source = pull_review` (same pulls/comments stream, not you) or `source = issue` (`GET /repos/.../issues/comments?since=`) |
+
+**Limitations:** “Received” and pull-review paths only attribute to PRs present in **`cached_pull_requests`** after **`github_pull_requests`** sync. Incremental `updated:` windows can miss rare edge cases (e.g. activity on a PR not touched since the cursor). Conversation comments use the **repository issues comments** API (GitHub treats PRs as issues).
+
+**Sync types:** `github_pr_review_comments` (comments + received), `github_pr_approvals_given` (approvals). Separate **`_syncedAtComments`** / **`_syncedAtApprovals`** on the payload (not currently shown in UI).
+
 ---
 
 ## Work panel (ticket list)
@@ -218,6 +232,7 @@ Incremental syncs populate caches from the same vendor APIs; field mappings abov
 | Review turnaround (cache) | GitHub `GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews` (during PR sync) |
 | Contributions | GitHub GraphQL `contributionsCollection` |
 | PR details / reviews | GitHub REST search + `pulls/{n}/reviews` |
+| PR comments / approvals / received | GitHub `pulls/comments`, `issues/comments`, search `reviewed-by`, `pulls/{n}/reviews` |
 | Jira tickets & velocity | Jira Cloud `POST /rest/api/3/search/jql` |
 | Linear issues | Linear GraphQL `https://api.linear.app/graphql` (`issues` query) |
 | Confluence docs / activity | Confluence REST `content/search` (+ optional analytics views) |

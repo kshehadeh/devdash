@@ -172,13 +172,16 @@ export function computeCachedReviewTurnaroundHours(
   if (rows.length === 0) return 0;
 
   let totalHours = 0;
+  let n = 0;
   for (const row of rows) {
     const c = new Date(row.created_at).getTime();
     const f = new Date(row.first_review_submitted_at).getTime();
     if (Number.isNaN(c) || Number.isNaN(f) || f < c) continue;
     totalHours += (f - c) / 3600000;
+    n++;
   }
-  return Math.round(totalHours / rows.length);
+  if (n === 0) return 0;
+  return Math.round(totalHours / n);
 }
 
 export interface StaleOpenPRCandidate {
@@ -606,5 +609,62 @@ export function getCachedPRReviewComments(
     timeAgo: timeAgo(row.created_at),
     url: row.url,
   }));
+}
+
+export function countCachedPRReviewCommentsAuthored(
+  devId: string,
+  days: number,
+  repos?: { org: string; name: string }[],
+): number {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) as c FROM cached_pr_review_comments
+       WHERE developer_id = ? AND created_at >= ?${repoSql}`,
+    )
+    .get(devId, sinceStr, ...repoValues) as { c: number };
+  return row.c;
+}
+
+export function countCachedPRCommentsReceived(
+  devId: string,
+  days: number,
+  repos?: { org: string; name: string }[],
+): number {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) as c FROM cached_pr_comments_received
+       WHERE developer_id = ? AND created_at >= ?${repoSql}`,
+    )
+    .get(devId, sinceStr, ...repoValues) as { c: number };
+  return row.c;
+}
+
+export function countCachedPRApprovalsGiven(
+  devId: string,
+  days: number,
+  repos?: { org: string; name: string }[],
+): number {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) as c FROM cached_pr_approvals_given
+       WHERE developer_id = ? AND submitted_at >= ?${repoSql}`,
+    )
+    .get(devId, sinceStr, ...repoValues) as { c: number };
+  return row.c;
 }
 

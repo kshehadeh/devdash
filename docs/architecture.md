@@ -173,7 +173,7 @@ Stats handlers resolve context via [`getStatsContext`](../electron/ipc/stats-con
 | `stats:velocity` | PR-based velocity / merge ratio / review turnaround (GitHub-only when code = GitHub) |
 | `stats:work` | Tickets / issues (alias: `stats:tickets`) |
 | `stats:docs` | Documentation stats (alias: `stats:confluence`) |
-| `stats:review-comments` | Cached PR review comments aggregated by day |
+| `stats:review-comments` | Cached PR metrics: comments you left, approvals given, comments received on your PRs (`{ developerId, days }`) |
 | `stats:team-overview` | All developers — velocity, tickets, cached GitHub review counts (`{ days }`) |
 | `stats:weekly-report-markdown` | Single Markdown string for a developer + lookback (`{ developerId, days }`) |
 | `reviews:get` | GitHub review queue + “on your PRs” lists from cache (`{ developerId }`) — see [`features.md`](./features.md) |

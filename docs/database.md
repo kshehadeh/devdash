@@ -134,7 +134,7 @@ Current schema evolves over migrations, but conceptually it is grouped as:
 
 ### Provider cache tables
 
-- GitHub: `cached_contributions`, `cached_pull_requests` (includes `first_review_submitted_at` as of migration **v20**), `cached_review_requests`
+- GitHub: `cached_contributions`, `cached_pull_requests` (includes `first_review_submitted_at` as of migration **v20**), `cached_review_requests`, `cached_pr_review_comments`, `cached_pr_comments_received` (migration **v21**), `cached_pr_approvals_given` (**v21**)
 - Jira: `cached_jira_tickets` — stale/deleted tickets are removed by two mechanisms: (1) a daily reconciliation pass (`reconcileJiraTickets` in `electron/sync/atlassian-sync.ts`) that diffs live Jira issue keys against the cache and deletes any that no longer exist; and (2) on-demand validation triggered when a user clicks a ticket link (`jira:ticket:validate` IPC handler in `electron/ipc/reference.ts`), which calls the Jira single-issue endpoint and removes the row immediately if it returns 404.
 - Confluence: `cached_confluence_pages`
 - Linear: `cached_linear_issues`

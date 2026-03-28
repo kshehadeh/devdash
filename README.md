@@ -6,7 +6,7 @@ A desktop developer dashboard that aggregates your code, work tracking, and docu
 ## Features
 
 - **Ecosystem Impact metrics** — velocity, merge ratio, **review turnaround** (time to first review), workload health, ticket throughput, and documentation authority at a glance
-- **GitHub** — contribution history, pull request list (staleness hints, merge timing), commit activity, and review-comment activity
+- **GitHub** — contribution history, pull request list (staleness hints, merge timing), commit activity, PR review comments and approvals you gave, and comments others left on your PRs
 - **Work tracking** — Jira or Linear issues with status categories and workload scoring
 - **Documentation** — Confluence page edits, reads, and knowledge influence
 - **My Day** — single view for reviews waiting on you, in-progress tickets, triggered reminders, and notification status

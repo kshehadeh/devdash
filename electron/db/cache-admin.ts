@@ -18,8 +18,14 @@ export const CACHE_BUCKET_DEFS = [
   {
     id: "github_pr_review_comments",
     label: "GitHub PR review comments",
-    description: "PR review comments authored by tracked developers.",
-    tables: ["cached_pr_review_comments"] as const,
+    description: "PR review comments you authored and comments others left on your PRs (inline + conversation).",
+    tables: ["cached_pr_review_comments", "cached_pr_comments_received"] as const,
+  },
+  {
+    id: "github_pr_approvals_given",
+    label: "GitHub PR approvals",
+    description: "Pull request reviews with APPROVED state submitted by tracked developers.",
+    tables: ["cached_pr_approvals_given"] as const,
   },
   {
     id: "jira_tickets",

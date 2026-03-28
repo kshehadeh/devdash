@@ -5,6 +5,7 @@ export const DASHBOARD_WIDGET_IDS = [
   "open_tickets",
   "commit_activity",
   "pr_review_comments",
+  "pr_comments_received",
   "documentation",
 ] as const;
 
@@ -16,7 +17,8 @@ export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidgetId, string> = {
   pull_requests: "Pull requests",
   open_tickets: "Open tickets / issues",
   commit_activity: "Commit activity",
-  pr_review_comments: "PR review comments",
+  pr_review_comments: "PR review activity (comments & approvals)",
+  pr_comments_received: "PR comments received",
   documentation: "Documentation",
 };
 

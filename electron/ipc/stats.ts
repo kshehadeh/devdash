@@ -13,7 +13,9 @@ import {
   getCachedJiraTickets, getCachedCompletedTicketCount,
   getCachedConfluencePages, getCachedConfluenceActivity,
   getCachedLinearTicketsAsJiraShape, getCachedLinearCompletedCount,
-  getCachedPRReviewComments,
+  countCachedPRReviewCommentsAuthored,
+  countCachedPRCommentsReceived,
+  countCachedPRApprovalsGiven,
   getCachedMyOpenPRReviewItems,
   getCachedReviewRequestItems,
 } from "../db/cache";
@@ -119,10 +121,12 @@ async function buildVelocityStats(id: string, days: number): Promise<VelocitySta
     return { velocity: 0, velocityChange: 0, mergeRatio: 0, reviewTurnaroundHours: 0, providerId: "github" };
   }
 
+  /** From `cached_pull_requests.first_review_submitted_at` (filled during PR sync). */
+  const reviewTurnaroundHours = computeCachedReviewTurnaroundHours(id, days, ctx.repoFilter);
+
   if (hasFreshCache(id, "github_pull_requests")) {
     const { velocity, velocityChange } = computeCachedVelocity(id, days, ctx.repoFilter);
     const mergeRatio = computeCachedMergeRatio(id, days, ctx.repoFilter);
-    const reviewTurnaroundHours = computeCachedReviewTurnaroundHours(id, days, ctx.repoFilter);
     const sync = getSyncStatus(id, "github_pull_requests");
     return {
       velocity,
@@ -151,7 +155,8 @@ async function buildVelocityStats(id: string, days: number): Promise<VelocitySta
     }
   }
 
-  return { velocity, velocityChange, mergeRatio, reviewTurnaroundHours: 0, providerId: "github" };
+  // Live path has no review crawl; still surface turnaround from last cached PR sync if present.
+  return { velocity, velocityChange, mergeRatio, reviewTurnaroundHours, providerId: "github" };
 }
 
 async function buildTicketsStats(id: string, days: number): Promise<TicketsStatsResponse> {
@@ -303,35 +308,29 @@ async function buildConfluenceStats(id: string, days: number): Promise<Confluenc
 }
 
 async function buildPRReviewCommentsStats(id: string, days: number): Promise<PRReviewCommentsResponse> {
+  const empty: PRReviewCommentsResponse = {
+    commentsGiven: 0,
+    approvalsGiven: 0,
+    commentsReceived: 0,
+  };
   const ctx = getStatsContext(id, days);
   if (!ctx || ctx.integration.code !== "github") {
-    return { commentDays: [], totalComments: 0 };
+    return empty;
   }
 
-  const comments = getCachedPRReviewComments(id, days, ctx.repoFilter.length > 0 ? ctx.repoFilter : undefined);
+  const repoArg = ctx.repoFilter.length > 0 ? ctx.repoFilter : undefined;
+  const commentsGiven = countCachedPRReviewCommentsAuthored(id, days, repoArg);
+  const commentsReceived = countCachedPRCommentsReceived(id, days, repoArg);
+  const approvalsGiven = countCachedPRApprovalsGiven(id, days, repoArg);
 
-  // Aggregate by date (YYYY-MM-DD)
-  const byDay = new Map<string, number>();
-  for (const c of comments) {
-    const day = c.createdAt.slice(0, 10);
-    byDay.set(day, (byDay.get(day) ?? 0) + 1);
-  }
-
-  // Fill every day in the lookback window (including zeros)
-  const commentDays: CommitDay[] = [];
-  const now = new Date();
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    commentDays.push({ date: key, count: byDay.get(key) ?? 0 });
-  }
-
-  const sync = getSyncStatus(id, "github_pr_review_comments");
+  const syncComments = getSyncStatus(id, "github_pr_review_comments");
+  const syncApprovals = getSyncStatus(id, "github_pr_approvals_given");
   return {
-    commentDays,
-    totalComments: comments.length,
-    _syncedAt: sync?.lastSyncedAt,
+    commentsGiven,
+    approvalsGiven,
+    commentsReceived,
+    _syncedAtComments: syncComments?.lastSyncedAt,
+    _syncedAtApprovals: syncApprovals?.lastSyncedAt,
   };
 }
 
@@ -392,7 +391,9 @@ async function buildWeeklyReportMarkdown(developerId: string, days: number): Pro
   lines.push(`- **Review turnaround:** ${velocity.reviewTurnaroundHours > 0 ? `${velocity.reviewTurnaroundHours}h avg to first review` : "—"}`);
   lines.push(`- **Workload health:** ${tickets.workloadHealth}/10`);
   lines.push(`- **Tickets completed (period):** ${tickets.ticketVelocity}`);
-  lines.push(`- **PR review comments left:** ${comments.totalComments}`);
+  lines.push(
+    `- **PR review comments left:** ${comments.commentsGiven} · **Approvals given:** ${comments.approvalsGiven} · **Comments received on your PRs:** ${comments.commentsReceived}`,
+  );
   lines.push("");
 
   lines.push("## Pull requests");

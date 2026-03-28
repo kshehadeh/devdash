@@ -1,11 +1,16 @@
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, Fragment, useMemo } from "react";
 import { Github, BookOpen, Calendar, Ticket, FileText, LayoutGrid } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Card } from "@/components/ui/Card";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
 import { MetricsBar } from "@/components/dashboard/MetricsBar";
 import { CommitBarChart } from "@/components/dashboard/CommitBarChart";
-import { PRCommentBarChart } from "@/components/dashboard/PRCommentBarChart";
+import {
+  PRApprovalsGivenCard,
+  PRCommentsGivenCard,
+  PRCommentsReceivedCard,
+  PR_METRIC_CARD_CLASS,
+} from "@/components/dashboard/PRReviewActivityCard";
 import { PullRequestList } from "@/components/dashboard/PullRequestList";
 import { ConfluenceSection } from "@/components/dashboard/ConfluenceSection";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
@@ -31,6 +36,32 @@ const LOOKBACK_OPTIONS = [
   { days: 90, label: "90 days" },
 ];
 
+const PR_METRICS_WIDGET_IDS = new Set<DashboardWidgetId>(["pr_review_comments", "pr_comments_received"]);
+
+type DashboardLayoutSegment =
+  | { type: "single"; id: DashboardWidgetId }
+  | { type: "pr_metrics"; ids: DashboardWidgetId[] };
+
+function segmentDashboardLayout(layout: DashboardWidgetId[]): DashboardLayoutSegment[] {
+  const out: DashboardLayoutSegment[] = [];
+  let i = 0;
+  while (i < layout.length) {
+    const w = layout[i];
+    if (PR_METRICS_WIDGET_IDS.has(w)) {
+      const ids: DashboardWidgetId[] = [];
+      while (i < layout.length && PR_METRICS_WIDGET_IDS.has(layout[i])) {
+        ids.push(layout[i]);
+        i++;
+      }
+      out.push({ type: "pr_metrics", ids });
+    } else {
+      out.push({ type: "single", id: w });
+      i++;
+    }
+  }
+  return out;
+}
+
 export default function DashboardPage() {
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const { selectedDevId, setSelectedDevId } = useSelectedDeveloper();
@@ -40,6 +71,7 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [widgetLayout, setWidgetLayout] = useState<DashboardWidgetId[]>(() => parseDashboardLayoutJson(undefined));
+  const layoutSegments = useMemo(() => segmentDashboardLayout(widgetLayout), [widgetLayout]);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportMd, setReportMd] = useState("");
@@ -97,11 +129,17 @@ export default function DashboardPage() {
     fetchDevelopers();
   }, [fetchDevelopers]);
 
+  const needsPrReviewStats =
+    widgetLayout.includes("pr_review_comments") || widgetLayout.includes("pr_comments_received");
+
   const github = useIpc<GithubStatsResponse>(selectedDevId ? "stats:code" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const tickets = useIpc<TicketsStatsResponse>(selectedDevId ? "stats:work" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const confluence = useIpc<ConfluenceStatsResponse>(selectedDevId ? "stats:docs" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
-  const reviewComments = useIpc<PRReviewCommentsResponse>(selectedDevId ? "stats:review-comments" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
+  const reviewComments = useIpc<PRReviewCommentsResponse>(
+    selectedDevId && needsPrReviewStats ? "stats:review-comments" : null,
+    [{ developerId: selectedDevId, days: lookbackDays }],
+  );
 
   if (loading) {
     return (
@@ -193,115 +231,146 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex flex-col gap-6 mt-2">
-              {widgetLayout.map((wid) => (
-                <Fragment key={wid}>
-                  {wid === "metrics_bar" ? (
-                    <MetricsBar
-                      lookbackDays={lookbackDays}
-                      velocity={velocity.data}
-                      tickets={tickets.data}
-                      confluence={confluence.data}
-                      velocityLoading={velocity.loading}
-                      ticketsLoading={tickets.loading}
-                      confluenceLoading={confluence.loading}
-                    />
-                  ) : null}
-                  {wid === "triggered_reminders" ? <TriggeredRemindersBanner /> : null}
-                  {wid === "pull_requests" ? (
-                    github.loading ? (
-                      <CardSkeleton lines={5} />
-                    ) : github.data ? (
-                      <Card>
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Github size={16} className="text-[var(--primary)]" />
-                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">Pull Requests</h3>
-                            {github.data.pullRequests.length > 0 && (
-                              <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
-                                {github.data.pullRequests.length}
-                              </span>
-                            )}
+              {layoutSegments.map((seg, segIdx) => {
+                if (seg.type === "pr_metrics") {
+                  return (
+                    <div key={`pr-metrics-${segIdx}`} className="flex flex-wrap gap-4 items-stretch">
+                      {reviewComments.loading ? (
+                        <>
+                          {seg.ids.includes("pr_review_comments") ? (
+                            <>
+                              <CardSkeleton lines={3} className={PR_METRIC_CARD_CLASS} />
+                              <CardSkeleton lines={3} className={PR_METRIC_CARD_CLASS} />
+                            </>
+                          ) : null}
+                          {seg.ids.includes("pr_comments_received") ? (
+                            <CardSkeleton lines={3} className={PR_METRIC_CARD_CLASS} />
+                          ) : null}
+                        </>
+                      ) : reviewComments.data ? (
+                        <>
+                          {seg.ids.includes("pr_review_comments") ? (
+                            <>
+                              <PRCommentsGivenCard
+                                commentsGiven={reviewComments.data.commentsGiven}
+                                lookbackDays={lookbackDays}
+                              />
+                              <PRApprovalsGivenCard
+                                approvalsGiven={reviewComments.data.approvalsGiven}
+                                lookbackDays={lookbackDays}
+                              />
+                            </>
+                          ) : null}
+                          {seg.ids.includes("pr_comments_received") ? (
+                            <PRCommentsReceivedCard
+                              commentsReceived={reviewComments.data.commentsReceived}
+                              lookbackDays={lookbackDays}
+                            />
+                          ) : null}
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                }
+
+                const wid = seg.id;
+                return (
+                  <Fragment key={wid}>
+                    {wid === "metrics_bar" ? (
+                      <MetricsBar
+                        lookbackDays={lookbackDays}
+                        velocity={velocity.data}
+                        tickets={tickets.data}
+                        confluence={confluence.data}
+                        velocityLoading={velocity.loading}
+                        ticketsLoading={tickets.loading}
+                        confluenceLoading={confluence.loading}
+                      />
+                    ) : null}
+                    {wid === "triggered_reminders" ? <TriggeredRemindersBanner /> : null}
+                    {wid === "pull_requests" ? (
+                      github.loading ? (
+                        <CardSkeleton lines={5} />
+                      ) : github.data ? (
+                        <Card>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <Github size={16} className="text-[var(--primary)]" />
+                              <h3 className="text-sm font-semibold text-[var(--on-surface)]">Pull Requests</h3>
+                              {github.data.pullRequests.length > 0 && (
+                                <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
+                                  {github.data.pullRequests.length}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Last {lookbackDays} days</span>
                           </div>
-                          <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Last {lookbackDays} days</span>
-                        </div>
-                        <PullRequestList prs={github.data.pullRequests} />
-                      </Card>
-                    ) : null
-                  ) : null}
-                  {wid === "open_tickets" ? (
-                    tickets.loading ? (
-                      <CardSkeleton lines={5} />
-                    ) : tickets.data ? (
-                      <Card>
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Ticket size={16} className="text-[var(--primary)]" />
-                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                              {tickets.data?.providerId === "linear" ? "Linear issues" : "Tickets"}
-                            </h3>
-                            {tickets.data.jiraTickets.length > 0 && (
-                              <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
-                                {tickets.data.jiraTickets.length}
-                              </span>
-                            )}
+                          <PullRequestList prs={github.data.pullRequests} />
+                        </Card>
+                      ) : null
+                    ) : null}
+                    {wid === "open_tickets" ? (
+                      tickets.loading ? (
+                        <CardSkeleton lines={5} />
+                      ) : tickets.data ? (
+                        <Card>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <Ticket size={16} className="text-[var(--primary)]" />
+                              <h3 className="text-sm font-semibold text-[var(--on-surface)]">
+                                {tickets.data?.providerId === "linear" ? "Linear issues" : "Tickets"}
+                              </h3>
+                              {tickets.data.jiraTickets.length > 0 && (
+                                <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
+                                  {tickets.data.jiraTickets.length}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                              Last {lookbackDays} days
+                            </span>
                           </div>
-                          <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                            Last {lookbackDays} days
-                          </span>
-                        </div>
-                        <JiraTicketList tickets={tickets.data.jiraTickets} onInvalidTicket={tickets.refresh} />
-                      </Card>
-                    ) : null
-                  ) : null}
-                  {wid === "commit_activity" ? (
-                    github.loading ? (
-                      <CardSkeleton lines={8} />
-                    ) : github.data ? (
-                      <Card>
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Github size={16} className="text-[var(--primary)]" />
-                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">Commit Activity</h3>
+                          <JiraTicketList tickets={tickets.data.jiraTickets} onInvalidTicket={tickets.refresh} />
+                        </Card>
+                      ) : null
+                    ) : null}
+                    {wid === "commit_activity" ? (
+                      github.loading ? (
+                        <CardSkeleton lines={8} />
+                      ) : github.data ? (
+                        <Card>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <Github size={16} className="text-[var(--primary)]" />
+                              <h3 className="text-sm font-semibold text-[var(--on-surface)]">Commit Activity</h3>
+                            </div>
+                            <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                              Last {lookbackDays} days
+                            </span>
                           </div>
-                          <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                            Last {lookbackDays} days
-                          </span>
-                        </div>
-                        <CommitBarChart commits={github.data.commitHistory} lookbackDays={lookbackDays} />
-                      </Card>
-                    ) : null
-                  ) : null}
-                  {wid === "pr_review_comments" ? (
-                    reviewComments.loading ? (
-                      <CardSkeleton lines={5} />
-                    ) : reviewComments.data ? (
-                      <Card>
-                        <PRCommentBarChart
-                          commentDays={reviewComments.data.commentDays}
-                          totalComments={reviewComments.data.totalComments}
-                          lookbackDays={lookbackDays}
-                        />
-                      </Card>
-                    ) : null
-                  ) : null}
-                  {wid === "documentation" ? (
-                    confluence.loading ? (
-                      <CardSkeleton lines={5} />
-                    ) : confluence.data ? (
-                      <Card>
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <BookOpen size={16} className="text-[var(--primary)]" />
-                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">Documentation</h3>
+                          <CommitBarChart commits={github.data.commitHistory} lookbackDays={lookbackDays} />
+                        </Card>
+                      ) : null
+                    ) : null}
+                    {wid === "documentation" ? (
+                      confluence.loading ? (
+                        <CardSkeleton lines={5} />
+                      ) : confluence.data ? (
+                        <Card>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <BookOpen size={16} className="text-[var(--primary)]" />
+                              <h3 className="text-sm font-semibold text-[var(--on-surface)]">Documentation</h3>
+                            </div>
+                            <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">Recent</span>
                           </div>
-                          <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">Recent</span>
-                        </div>
-                        <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
-                      </Card>
-                    ) : null
-                  ) : null}
-                </Fragment>
-              ))}
+                          <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
+                        </Card>
+                      ) : null
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </div>
 
             <DashboardCustomizeDialog open={customizeOpen} onClose={() => setCustomizeOpen(false)} onSaved={reloadLayout} />

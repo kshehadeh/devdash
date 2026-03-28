@@ -381,6 +381,36 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE cached_pull_requests ADD COLUMN first_review_submitted_at TEXT;
   `,
+  // v21 — PR approvals given + comments received on authored PRs
+  `
+  CREATE TABLE IF NOT EXISTS cached_pr_approvals_given (
+    developer_id TEXT NOT NULL,
+    review_id INTEGER NOT NULL,
+    repo TEXT NOT NULL,
+    pr_number INTEGER NOT NULL,
+    submitted_at TEXT NOT NULL,
+    url TEXT,
+    PRIMARY KEY (developer_id, review_id),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_cached_pr_approvals_dev_submitted
+    ON cached_pr_approvals_given(developer_id, submitted_at);
+
+  CREATE TABLE IF NOT EXISTS cached_pr_comments_received (
+    developer_id TEXT NOT NULL,
+    source TEXT NOT NULL CHECK(source IN ('pull_review', 'issue')),
+    comment_id INTEGER NOT NULL,
+    repo TEXT NOT NULL,
+    pr_number INTEGER NOT NULL,
+    author_login TEXT,
+    created_at TEXT NOT NULL,
+    url TEXT,
+    PRIMARY KEY (developer_id, source, comment_id),
+    FOREIGN KEY (developer_id) REFERENCES developers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_cached_pr_comments_recv_dev_created
+    ON cached_pr_comments_received(developer_id, created_at);
+  `,
 ];
 
 
