@@ -31,6 +31,27 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+function formatInstalledDependencyLines(
+  nodeModulesDir: string,
+  dependencies: Record<string, string>,
+): string {
+  if (Object.keys(dependencies).length === 0) return "";
+  return Object.entries(dependencies)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, requestedVersion]) => {
+      const dependencyPackagePath = path.join(nodeModulesDir, name, "package.json");
+      try {
+        const dependencyPackage = JSON.parse(fs.readFileSync(dependencyPackagePath, "utf8")) as {
+          version?: string;
+        };
+        return `${name} ${dependencyPackage.version ?? requestedVersion}`;
+      } catch {
+        return `${name} ${requestedVersion}`;
+      }
+    })
+    .join("\n");
+}
+
 function getAboutDetails() {
   const rootDir = path.join(__dirname, "..", "..");
   const packageJsonPath = path.join(rootDir, "package.json");
@@ -38,35 +59,41 @@ function getAboutDetails() {
 
   let appVersion = app.getVersion();
   let dependencies: Record<string, string> = {};
+  let devDependencies: Record<string, string> = {};
+  let optionalDependencies: Record<string, string> = {};
 
   try {
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
       version?: string;
       dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
     };
     if (packageJson.version) appVersion = packageJson.version;
     dependencies = packageJson.dependencies ?? {};
+    devDependencies = packageJson.devDependencies ?? {};
+    optionalDependencies = packageJson.optionalDependencies ?? {};
   } catch {
     // Keep defaults if package metadata cannot be read.
   }
 
-  const librariesText =
-    Object.entries(dependencies)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, requestedVersion]) => {
-        const dependencyPackagePath = path.join(nodeModulesDir, name, "package.json");
-        try {
-          const dependencyPackage = JSON.parse(fs.readFileSync(dependencyPackagePath, "utf8")) as {
-            version?: string;
-          };
-          return `${name} ${dependencyPackage.version ?? requestedVersion}`;
-        } catch {
-          return `${name} ${requestedVersion}`;
-        }
-      })
-      .join("\n") || "No third-party libraries listed.";
+  const runtimeLines = [
+    formatInstalledDependencyLines(nodeModulesDir, dependencies),
+    formatInstalledDependencyLines(nodeModulesDir, optionalDependencies),
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  return { appVersion, librariesText };
+  const devLines = formatInstalledDependencyLines(nodeModulesDir, devDependencies);
+
+  const sections: string[] = [];
+  if (runtimeLines) sections.push(`Runtime & bundled dependencies\n\n${runtimeLines}`);
+  if (devLines) sections.push(`Development dependencies\n\n${devLines}`);
+
+  const librariesText = sections.join("\n\n") || "No third-party libraries listed.";
+  const creditsText = runtimeLines || librariesText;
+
+  return { appVersion, librariesText, creditsText };
 }
 
 function resolveThemedIconPath() {
@@ -139,14 +166,14 @@ function getThemedIconImage() {
 }
 
 function setupAboutPanel() {
-  const { appVersion, librariesText } = getAboutDetails();
+  const { appVersion, creditsText } = getAboutDetails();
 
   app.setAboutPanelOptions({
     applicationName: "DevDash",
     applicationVersion: appVersion,
     version: appVersion,
     iconPath: resolveThemedIconPath(),
-    credits: `Open Source Libraries\n${librariesText}`,
+    credits: `Open source libraries\n${creditsText}`,
   });
 }
 
@@ -158,11 +185,11 @@ function showAboutDialog() {
 
   const { appVersion, librariesText } = getAboutDetails();
   const iconDataUrl = getThemedIconImage()?.toDataURL() ?? "";
-  const detailsText = `Open Source Libraries\n${librariesText}\n\nAdditional Information:\n`;
+  const detailsText = `Open source libraries\n\n${librariesText}`;
 
   aboutWindow = new BrowserWindow({
-    width: 680,
-    height: 640,
+    width: 800,
+    height: 720,
     parent: mainWindow ?? undefined,
     modal: !!mainWindow,
     resizable: true,
@@ -173,6 +200,7 @@ function showAboutDialog() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, "about-preload.js"),
     },
   });
 
@@ -186,31 +214,61 @@ function showAboutDialog() {
       .wrap { padding: 20px; display: flex; flex-direction: column; gap: 12px; height: 100vh; box-sizing: border-box; }
       .title { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; }
       .title img { width: 28px; height: 28px; object-fit: contain; }
-      .subtitle { color: #d1d5db; font-size: 13px; margin-bottom: 4px; }
-      textarea {
-        width: 100%; flex: 1; box-sizing: border-box; resize: none; border-radius: 8px;
-        border: 1px solid #374151; background: #030712; color: #f9fafb; padding: 12px;
-        font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      .details {
+        width: 100%; flex: 1; min-height: 0; box-sizing: border-box; overflow: auto;
+        border-radius: 8px; border: 1px solid #374151; background: #030712; color: #f9fafb;
+        padding: 14px 16px; margin: 0;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        white-space: pre-wrap; word-break: break-word; user-select: text;
       }
-      .note { color: #9ca3af; font-size: 12px; }
-      .actions { display: flex; justify-content: flex-end; }
+      .actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-shrink: 0; }
       button {
         border: 1px solid #374151; background: #1f2937; color: #f9fafb;
         border-radius: 6px; padding: 8px 14px; cursor: pointer;
       }
+      button:disabled { opacity: 0.55; cursor: not-allowed; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="title">${iconDataUrl ? `<img src="${iconDataUrl}" alt="DevDash icon" />` : ""}<span>DevDash ${escapeHtml(appVersion)}</span></div>
-      <div class="subtitle">Library details are editable here so you can add notes before copying.</div>
-      <textarea id="details">${escapeHtml(detailsText)}</textarea>
-      <div class="note">This text is not persisted yet; it is for viewing/editing/copying in this window.</div>
-      <div class="actions"><button id="closeBtn">Close</button></div>
+      <pre class="details">${escapeHtml(detailsText)}</pre>
+      <div class="actions">
+        <button type="button" id="checkUpdatesBtn">Check for updates</button>
+        <button type="button" id="closeBtn">Close</button>
+      </div>
     </div>
     <script>
       const closeBtn = document.getElementById("closeBtn");
+      const checkUpdatesBtn = document.getElementById("checkUpdatesBtn");
       closeBtn?.addEventListener("click", () => window.close());
+      checkUpdatesBtn?.addEventListener("click", async () => {
+        const api = window.aboutShell;
+        if (!api?.checkForUpdates) return;
+        checkUpdatesBtn.disabled = true;
+        try {
+          const r = await api.checkForUpdates();
+          if (r.status === "up-to-date") {
+            alert("You're running the latest version of DevDash.");
+          } else if (r.status === "available") {
+            alert(
+              "Version " +
+                r.version +
+                " is available.\\n\\nCheck the main DevDash window for the option to download and install.",
+            );
+          } else if (r.status === "skipped") {
+            alert(
+              r.reason === "development"
+                ? "Update checks are not available in development builds."
+                : r.reason,
+            );
+          } else {
+            alert(r.message || "Update check failed.");
+          }
+        } finally {
+          checkUpdatesBtn.disabled = false;
+        }
+      });
     </script>
   </body>
 </html>`;
