@@ -13,6 +13,32 @@ A desktop developer dashboard that aggregates your code, work tracking, and docu
 - **Offline-first** — SQLite cache with background sync so the dashboard loads instantly
 - **Auto-updates** — built-in update mechanism via GitHub Releases
 
+### Dashboard widgets
+
+The dashboard presents your engineering activity through modular widgets that refresh based on your selected time window (7, 14, 30, 60, or 90 days):
+
+- **Pull Requests** — Open and merged PRs with staleness indicators, review counts, and quick access to GitHub
+- **Commit Activity** — Daily commit bar chart showing coding velocity over the selected period
+- **PR Review Comments** — Bar chart tracking your review participation and collaboration activity
+- **Open Tickets** — Current Jira or Linear issues with status, priority, and workload scoring
+- **Documentation** — Recent Confluence page updates, reads, and knowledge contribution metrics
+
+Context menus on pull requests, tickets, and documentation items let you quickly set reminders or open external links.
+
+### Reminders
+
+Built-in reminder system to help you stay on top of tasks:
+
+- **Flexible scheduling** — Set reminders for any date/time with optional notes and external links
+- **Desktop notifications** — Native notifications when reminders trigger with click-to-navigate
+- **Status tracking** — Pending, triggered, snoozed, and dismissed states with automatic sorting
+- **macOS Reminders integration** — Bidirectional sync with the macOS Reminders app (optional, macOS only)
+- **Context integration** — Create reminders directly from pull requests, tickets, or docs via context menus
+
+Reminders can be managed from the dedicated Reminders page accessible via the sidebar.
+
+See [docs/reminders.md](docs/reminders.md) for technical details.
+
 ## Download
 
 DevDash is distributed as a macOS `.dmg`. Grab the latest release from [GitHub Releases](https://github.com/kshehadeh/devdash/releases).
