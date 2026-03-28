@@ -160,8 +160,15 @@ export default function RemindersPage() {
 
   async function handleToggleMacOSSync() {
     const newValue = !syncToMacOS;
-    setSyncToMacOS(newValue);
-    await invoke("reminders:config:set", { syncToMacOS: newValue });
+    try {
+      await invoke("reminders:config:set", { syncToMacOS: newValue });
+      setSyncToMacOS(newValue);
+      // Reload config to get updated macOS availability after permission check
+      await loadConfig();
+    } catch (err) {
+      // Revert UI state if permission was denied or error occurred
+      alert(`Failed to ${newValue ? "enable" : "disable"} macOS sync: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
   }
 
   // Filter reminders on the frontend
@@ -235,7 +242,7 @@ export default function RemindersPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <nav className="w-56 shrink-0 bg-[var(--surface-container-low)] border-r border-[var(--outline-variant)]/20 py-3 flex flex-col gap-0.5 overflow-y-auto">
-          {(["all", "pending", "triggered", "snoozed", "dismissed"] as const).map((status) => {
+          {(["pending", "triggered", "snoozed", "dismissed", "all"] as const).map((status) => {
             const isActive = filter === status;
             
             // Calculate count based on the same filtering logic

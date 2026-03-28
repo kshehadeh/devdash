@@ -143,12 +143,25 @@ export function registerReminderHandlers(getWindow: () => BrowserWindow | null) 
 
   ipcMain.handle("reminders:config:get", async () => {
     const syncToMacOS = getConfig("reminders_sync_macos") === "1";
-    const macOSAvailable = await isMacOSRemindersAvailable();
+    // Only check macOS availability if sync is enabled or if user has explicitly checked before
+    const hasCheckedBefore = getConfig("reminders_macos_checked") === "1";
+    const macOSAvailable = (syncToMacOS || hasCheckedBefore) ? await isMacOSRemindersAvailable() : process.platform === "darwin";
     return { syncToMacOS, macOSAvailable };
   });
 
-  ipcMain.handle("reminders:config:set", (_e, data: { syncToMacOS: boolean }) => {
+  ipcMain.handle("reminders:config:set", async (_e, data: { syncToMacOS: boolean }) => {
     if (typeof data?.syncToMacOS !== "boolean") throw new Error("Invalid syncToMacOS value");
+    
+    // If user is enabling sync, check macOS availability (this will trigger permission prompt)
+    if (data.syncToMacOS && process.platform === "darwin") {
+      const available = await isMacOSRemindersAvailable();
+      if (!available) {
+        throw new Error("macOS Reminders is not available. Please grant permission in System Settings.");
+      }
+      // Mark that we've checked, so future config:get calls can check availability
+      setConfig("reminders_macos_checked", "1");
+    }
+    
     setConfig("reminders_sync_macos", data.syncToMacOS ? "1" : "0");
     return { success: true };
   });
