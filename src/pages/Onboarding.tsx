@@ -71,7 +71,7 @@ function DocLink({ href, children }: { href: string; children: React.ReactNode }
   );
 }
 
-const STEPS = ["Areas", "Credentials", "Data sources", "Your profile"] as const;
+const STEPS = ["Areas", "Credentials", "Data sources", "Profile"] as const;
 
 export default function OnboardingPage() {
   const navigate = useNavigate();

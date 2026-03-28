@@ -213,7 +213,7 @@ export default function ReviewsPage() {
               <Card>
                 <div className="flex items-center gap-2 mb-3">
                   <Github size={16} className="text-[var(--primary)]" />
-                  <h3 className="text-sm font-semibold text-[var(--on-surface)]">On your pull requests</h3>
+                  <h3 className="text-sm font-semibold text-[var(--on-surface)]">Pull Requests</h3>
                   {reviews.data.onYourPullRequests.length > 0 ? (
                     <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
                       {reviews.data.onYourPullRequests.length}
@@ -221,7 +221,7 @@ export default function ReviewsPage() {
                   ) : null}
                 </div>
                 <p className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-2">
-                  Your open PRs and review status
+                  Open PRs and review status
                 </p>
                 {reviews.data.onYourPullRequests.length === 0 ? (
                   <p className="text-sm text-[var(--on-surface-variant)] py-2">No open pull requests.</p>

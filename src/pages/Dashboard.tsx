@@ -234,7 +234,6 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2">
                         <Ticket size={16} className="text-[var(--primary)]" />
                         <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          {(developers.find((d) => d.id === selectedDevId)?.name.split(" ")[0] ?? "Open")}{" "}
                           {tickets.data?.providerId === "linear" ? "Linear issues" : "Tickets"}
                         </h3>
                         {tickets.data.jiraTickets.length > 0 && (
