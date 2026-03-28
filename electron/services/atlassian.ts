@@ -1,5 +1,6 @@
 // @ts-nocheck — copied from lib/services, fetch().json() returns unknown in strict mode
 import type { JiraTicket, ConfluenceDoc, ConfluenceActivity } from "../types";
+import { jiraStatusCategoryFromApi } from "../jira-status-category";
 
 function basicAuth(email: string, token: string): string {
   return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
@@ -101,7 +102,7 @@ export async function fetchJiraTickets(
     key: issue.key,
     title: issue.fields.summary,
     status: issue.fields.status.name,
-    statusCategory: mapStatus(issue.fields.status.statusCategory.key),
+    statusCategory: jiraStatusCategoryFromApi(issue.fields.status.statusCategory.key),
     priority: mapPriority(issue.fields.priority.name),
     type: issue.fields.issuetype.name,
     updatedAt: issue.fields.updated,
@@ -165,7 +166,7 @@ export async function fetchJiraAssignedOrWatchedUpdatedTickets(
     key: issue.key,
     title: issue.fields.summary,
     status: issue.fields.status.name,
-    statusCategory: mapStatus(issue.fields.status.statusCategory.key),
+    statusCategory: jiraStatusCategoryFromApi(issue.fields.status.statusCategory.key),
     priority: mapPriority(issue.fields.priority.name),
     type: issue.fields.issuetype.name,
     updatedAt: issue.fields.updated,

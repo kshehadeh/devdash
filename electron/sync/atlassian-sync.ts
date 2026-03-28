@@ -4,6 +4,7 @@ import { getConnection } from "../db/connections";
 import { getDeveloper } from "../db/developers";
 import { getSourcesForDeveloper } from "../db/sources";
 import { getWorkEmailForDeveloper } from "../db/developer-identity";
+import { jiraStatusCategoryFromApi } from "../jira-status-category";
 
 function basicAuth(email: string, token: string): string {
   return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
@@ -179,10 +180,7 @@ export async function syncJiraTickets(developerId: string): Promise<void> {
 
       db.transaction(() => {
         for (const issue of issues) {
-          const categoryKey = issue.fields.status.statusCategory.key;
-          const statusCategory =
-            categoryKey === "done" ? "done" :
-            categoryKey === "indeterminate" ? "in_progress" : "todo";
+          const statusCategory = jiraStatusCategoryFromApi(issue.fields.status.statusCategory.key);
 
           const rawPriority = (issue.fields.priority?.name ?? "Medium").toLowerCase();
           const priority =
