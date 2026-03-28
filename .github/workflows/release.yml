@@ -51,12 +51,17 @@ jobs:
           PREV_TAG="$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
             --jq --arg cur "${GITHUB_REF_NAME}" \
             '[.[] | select(.draft == false and .tag_name != $cur)] | first | .tag_name // empty')"
-          NOTES_ARGS=( --method POST "repos/${{ github.repository }}/releases/generate-notes" -f "tag_name=${GITHUB_REF_NAME}" )
+          GEN="repos/${{ github.repository }}/releases/generate-notes"
+          PREV_FIELD=()
           if [[ -n "${PREV_TAG}" ]]; then
             echo "Comparing ${GITHUB_REF_NAME} to previous published release tag: ${PREV_TAG}"
-            NOTES_ARGS+=( -f "previous_tag_name=${PREV_TAG}" )
+            PREV_FIELD=( -f "previous_tag_name=${PREV_TAG}" )
           else
             echo "No earlier published release found; GitHub will choose the default baseline for generate-notes."
           fi
-          gh api "${NOTES_ARGS[@]}" --jq .body > release-notes.md
+          # gh api requires <endpoint> as the first argument (not --method POST).
+          gh api "${GEN}" --method POST \
+            -f "tag_name=${GITHUB_REF_NAME}" \
+            "${PREV_FIELD[@]}" \
+            --jq '.body' > release-notes.md
           gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.md
