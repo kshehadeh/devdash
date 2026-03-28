@@ -62,13 +62,16 @@ function openDatabaseAndMigrate(): void {
 
   if (!_schedulerStarted) {
     _schedulerStarted = true;
-    import("../sync/scheduler")
-      .then(({ startSyncScheduler }) => {
+    Promise.all([
+      import("../sync/scheduler").then(({ startSyncScheduler }) => {
         startSyncScheduler();
-      })
-      .catch((e) => {
-        console.error("[DB] Failed to start sync scheduler:", e);
-      });
+      }),
+      import("../network-monitor").then(({ startNetworkMonitor }) => {
+        startNetworkMonitor();
+      }),
+    ]).catch((e) => {
+      console.error("[DB] Failed to start sync scheduler or network monitor:", e);
+    });
   }
 }
 

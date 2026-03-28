@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.removeListener("sync:progress", handler);
     };
   },
+  onNetworkStatus: (callback: (payload: { online: boolean }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { online: boolean }) => callback(payload);
+    ipcRenderer.on("network:status", handler);
+    return () => {
+      ipcRenderer.removeListener("network:status", handler);
+    };
+  },
   onUpdateAvailable: (callback: (payload: { version: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: { version: string }) => callback(payload);
     ipcRenderer.on("update:available", handler);

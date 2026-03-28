@@ -236,7 +236,12 @@ export interface SyncStatusResponse {
   syncing: boolean;
   developers: SyncStatusDeveloper[];
   progress: SyncProgressPayload;
+  online: boolean;
 }
+
+export type SyncTriggerResult =
+  | { triggered: true }
+  | { triggered: false; reason: "offline" };
 
 export type AppNotificationType = "info" | "success" | "warning" | "error";
 

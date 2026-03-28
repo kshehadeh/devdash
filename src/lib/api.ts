@@ -22,6 +22,7 @@ declare global {
       onMenuNavigate: (callback: (path: string) => void) => void;
       onOpenCommandPalette: (callback: () => void) => () => void;
       onSyncProgress: (callback: (payload: unknown) => void) => () => void;
+      onNetworkStatus: (callback: (payload: { online: boolean }) => void) => () => void;
       onUpdateAvailable: (callback: (payload: { version: string }) => void) => () => void;
       onNotificationOpen: (callback: (payload: { id: string }) => void) => () => void;
       onNotificationsChanged: (callback: () => void) => () => void;

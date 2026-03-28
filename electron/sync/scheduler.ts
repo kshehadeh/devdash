@@ -1,3 +1,4 @@
+import { isNetworkOnline } from "../network-monitor";
 import { syncAll } from "./engine";
 
 const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
@@ -13,10 +14,12 @@ export function startSyncScheduler(): void {
 
   // Delay initial sync by 5 seconds to let the server finish starting
   setTimeout(() => {
+    if (!isNetworkOnline()) return;
     syncAll().catch((err) => console.error("[SyncScheduler] Initial sync error:", err));
   }, 5000);
 
   intervalId = setInterval(() => {
+    if (!isNetworkOnline()) return;
     syncAll().catch((err) => console.error("[SyncScheduler] Scheduled sync error:", err));
   }, SYNC_INTERVAL_MS);
 }

@@ -48,6 +48,7 @@ interface AppStatusContextValue {
   syncing: boolean;
   progress: SyncProgressPayload;
   lastSyncedAt: string | null;
+  online: boolean;
   notifications: AppNotification[];
   pushNotification: (n: { message: string; type?: AppNotificationType; ttlMs?: number }) => void;
   dismissNotification: (id: string) => void;
@@ -59,6 +60,7 @@ const AppStatusContext = createContext<AppStatusContextValue | null>(null);
 export function AppStatusProvider({ children }: { children: ReactNode }) {
   const [progress, setProgress] = useState<SyncProgressPayload>(defaultProgress);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [online, setOnline] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const fetchSyncStatus = useCallback(async () => {
@@ -67,6 +69,7 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
       const sel = localStorage.getItem("devdash.selectedDevId") ?? "";
       const dev = data.developers?.find((d) => d.id === sel);
       setLastSyncedAt(dev?.lastSyncedAt ?? null);
+      setOnline(data.online);
       if (data.progress) {
         const p = parseProgress(data.progress);
         if (p) setProgress(p);
@@ -86,6 +89,13 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
     const off = window.electron.onSyncProgress((raw) => {
       const p = parseProgress(raw);
       if (p) setProgress(p);
+    });
+    return off;
+  }, []);
+
+  useEffect(() => {
+    const off = window.electron.onNetworkStatus(({ online: next }) => {
+      setOnline(next);
     });
     return off;
   }, []);
@@ -115,12 +125,13 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
       syncing,
       progress,
       lastSyncedAt,
+      online,
       notifications,
       pushNotification,
       dismissNotification,
       refreshSyncStatus: fetchSyncStatus,
     }),
-    [syncing, progress, lastSyncedAt, notifications, pushNotification, dismissNotification, fetchSyncStatus],
+    [syncing, progress, lastSyncedAt, online, notifications, pushNotification, dismissNotification, fetchSyncStatus],
   );
 
   return <AppStatusContext.Provider value={value}>{children}</AppStatusContext.Provider>;

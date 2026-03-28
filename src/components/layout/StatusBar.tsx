@@ -7,7 +7,7 @@ import { useAppStatus } from "@/context/AppStatusContext";
 import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import { StatusBarPersistentMessages } from "@/components/layout/StatusBarPersistentMessages";
 import { invoke } from "@/lib/api";
-import type { AppNotificationType, SyncProgressPayload } from "@/lib/types";
+import type { AppNotificationType, SyncProgressPayload, SyncTriggerResult } from "@/lib/types";
 
 function formatSyncTime(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
@@ -55,7 +55,8 @@ const notifyStyles: Record<AppNotificationType, string> = {
 
 export function StatusBar() {
   const { selectedDevId } = useSelectedDeveloper();
-  const { syncing, progress, lastSyncedAt, notifications, dismissNotification, refreshSyncStatus } = useAppStatus();
+  const { syncing, progress, lastSyncedAt, online, notifications, dismissNotification, refreshSyncStatus } =
+    useAppStatus();
   const [triggering, setTriggering] = useState(false);
   const pct = progressFraction(progress);
   const detail = activeDetail(progress);
@@ -64,7 +65,10 @@ export function StatusBar() {
   const handleSync = useCallback(async () => {
     setTriggering(true);
     try {
-      await invoke("sync:trigger", selectedDevId ? { developerId: selectedDevId } : {});
+      const result = await invoke<SyncTriggerResult>("sync:trigger", selectedDevId ? { developerId: selectedDevId } : {});
+      if (!result.triggered && result.reason === "offline") {
+        return;
+      }
       await new Promise((r) => setTimeout(r, 400));
       await refreshSyncStatus();
     } catch (err) {
@@ -86,7 +90,13 @@ export function StatusBar() {
           <span
             className={clsx(
               "inline-block w-1.5 h-1.5 rounded-full shrink-0",
-              syncing ? "bg-amber-400 animate-pulse" : lastSyncedAt ? "bg-emerald-400" : "bg-[var(--outline)]",
+              syncing
+                ? "bg-amber-400 animate-pulse"
+                : !online
+                  ? "bg-amber-400"
+                  : lastSyncedAt
+                    ? "bg-emerald-400"
+                    : "bg-[var(--outline)]",
             )}
           />
           <div className="min-w-0 flex-1">
@@ -106,6 +116,18 @@ export function StatusBar() {
                     </span>
                   )}
                 </>
+              ) : !online ? (
+                <>
+                  <span className="text-amber-200 font-medium">No network connection</span>
+                  <span className="text-[var(--on-surface-variant)]/70"> · </span>
+                  <span>Sync paused — we&apos;ll resume when you&apos;re back online</span>
+                  {lastSyncedAt && (
+                    <>
+                      <span className="text-[var(--on-surface-variant)]/70"> · </span>
+                      <span className="text-[var(--on-surface-variant)]">Last synced {formatSyncTime(lastSyncedAt)}</span>
+                    </>
+                  )}
+                </>
               ) : (
                 <>
                   <span className="text-[var(--on-surface)] font-medium">Ready</span>
@@ -120,12 +142,14 @@ export function StatusBar() {
           <button
             type="button"
             onClick={() => void handleSync()}
-            disabled={spin}
+            disabled={spin || !online}
             className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md hover:bg-[var(--surface-container-high)] transition-colors disabled:opacity-40"
             title={
-              selectedDevId
-                ? "Sync data from connected integrations for the selected developer"
-                : "Sync all developers from connected integrations"
+              !online
+                ? "Connect to the internet to sync"
+                : selectedDevId
+                  ? "Sync data from connected integrations for the selected developer"
+                  : "Sync all developers from connected integrations"
             }
           >
             <RefreshCw size={14} className={clsx("text-[var(--on-surface-variant)]", spin && "animate-spin")} />

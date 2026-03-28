@@ -1,3 +1,4 @@
+import { isNetworkOnline } from "../network-monitor";
 import { getDb } from "../db/index";
 import { getRegisteredSyncTasks } from "../integrations/sync-registry";
 import { syncConfluenceSpaceList } from "./atlassian-sync";
@@ -61,6 +62,8 @@ export interface SyncDeveloperOptions {
 
 export async function syncDeveloper(developerId: string, opts: SyncDeveloperOptions = {}): Promise<void> {
   const { scope = "single", devIndex = 1, devTotal = 1, silent = false } = opts;
+
+  if (!isNetworkOnline()) return;
 
   const db = getDb();
   const row = db.prepare("SELECT name FROM developers WHERE id = ?").get(developerId) as { name: string } | undefined;
@@ -133,6 +136,7 @@ export async function syncAll(): Promise<void> {
     console.log("[Sync] Already syncing, skipping");
     return;
   }
+  if (!isNetworkOnline()) return;
   _syncing = true;
 
   try {
