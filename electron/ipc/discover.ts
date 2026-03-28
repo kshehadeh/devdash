@@ -1,6 +1,6 @@
 // @ts-nocheck — external API calls, fetch().json() returns unknown
 import { ipcMain } from "electron";
-import { getConnection } from "../db/connections";
+import { getConnection, hasUsableToken } from "../db/connections";
 import { fetchAllLinearTeams } from "../services/linear";
 import { getCachedConfluenceSpaces, syncConfluenceSpaceList } from "../sync/atlassian-sync";
 
@@ -15,7 +15,7 @@ function atlAuth(email: string, token: string) {
 export function registerDiscoverHandlers() {
   ipcMain.handle("discover:github:orgs", async () => {
     const conn = getConnection("github");
-    if (!conn?.connected || !conn.token) throw new Error("GitHub not connected");
+    if (!hasUsableToken(conn)) throw new Error("GitHub not connected");
     const headers = ghHeaders(conn.token);
 
     const [orgsRes, userRes] = await Promise.all([
@@ -32,7 +32,7 @@ export function registerDiscoverHandlers() {
   ipcMain.handle("discover:github:repos", async (_e, data: { org: string }) => {
     if (!data.org) throw new Error("org parameter required");
     const conn = getConnection("github");
-    if (!conn?.connected || !conn.token) throw new Error("GitHub not connected");
+    if (!hasUsableToken(conn)) throw new Error("GitHub not connected");
     const headers = ghHeaders(conn.token);
 
     const userRes = await fetch("https://api.github.com/user", { headers });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, Trash2 } from "lucide-react";
 import { invoke } from "@/lib/api";
 import type { ReminderRecord } from "@/lib/types";

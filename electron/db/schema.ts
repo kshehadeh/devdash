@@ -377,6 +377,10 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE reminders ADD COLUMN synced_to_macos INTEGER NOT NULL DEFAULT 0;
   `,
+  // v20 — first PR review timestamp for review-turnaround metrics
+  `
+  ALTER TABLE cached_pull_requests ADD COLUMN first_review_submitted_at TEXT;
+  `,
 ];
 
 

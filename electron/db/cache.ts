@@ -111,14 +111,21 @@ export function getCachedPullRequests(devId: string, days: number, repos?: { org
   const { sql: repoSql, values: repoValues } = repoClause(repos);
 
   const rows = db.prepare(`
-    SELECT pr_number, repo, title, status, review_count, created_at, updated_at
+    SELECT pr_number, repo, title, status, review_count, created_at, updated_at, merged_at, first_review_submitted_at
     FROM cached_pull_requests
     WHERE developer_id = ? AND created_at >= ?${repoSql}
     ORDER BY updated_at DESC
     LIMIT 15
   `).all(devId, sinceStr, ...repoValues) as {
-    pr_number: number; repo: string; title: string; status: string;
-    review_count: number; created_at: string; updated_at: string;
+    pr_number: number;
+    repo: string;
+    title: string;
+    status: string;
+    review_count: number;
+    created_at: string;
+    updated_at: string;
+    merged_at: string | null;
+    first_review_submitted_at: string | null;
   }[];
 
   return rows.map((row) => ({
@@ -129,10 +136,115 @@ export function getCachedPullRequests(devId: string, days: number, repos?: { org
     url: `https://github.com/${row.repo}/pull/${row.pr_number}`,
     status: row.status as PullRequest["status"],
     reviewCount: row.review_count,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
+    mergedAt: row.merged_at,
+    firstReviewSubmittedAt: row.first_review_submitted_at,
     timeAgo: timeAgo(row.updated_at),
     isActive: row.status === "open",
   }));
+}
+
+/** Mean hours from PR creation to first submitted review for PRs in lookback with a known first review. */
+export function computeCachedReviewTurnaroundHours(
+  devId: string,
+  days: number,
+  repos?: { org: string; name: string }[],
+): number {
+  if (repos && repos.length === 0) return 0;
+
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+
+  const rows = db.prepare(`
+    SELECT created_at, first_review_submitted_at
+    FROM cached_pull_requests
+    WHERE developer_id = ?
+      AND created_at >= ?
+      AND first_review_submitted_at IS NOT NULL
+      AND first_review_submitted_at != ''
+      ${repoSql}
+  `).all(devId, sinceStr, ...repoValues) as { created_at: string; first_review_submitted_at: string }[];
+
+  if (rows.length === 0) return 0;
+
+  let totalHours = 0;
+  for (const row of rows) {
+    const c = new Date(row.created_at).getTime();
+    const f = new Date(row.first_review_submitted_at).getTime();
+    if (Number.isNaN(c) || Number.isNaN(f) || f < c) continue;
+    totalHours += (f - c) / 3600000;
+  }
+  return Math.round(totalHours / rows.length);
+}
+
+export interface StaleOpenPRCandidate {
+  repo: string;
+  prNumber: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  reviewCount: number;
+  level: "warn" | "danger";
+}
+
+/** Open authored PRs that match stale rules (no reviews yet, age from creation). */
+export function getCachedStaleOpenAuthoredPRs(
+  devId: string,
+  warnDays: number,
+  dangerDays: number,
+  repos?: { org: string; name: string }[],
+): StaleOpenPRCandidate[] {
+  if (repos && repos.length === 0) return [];
+
+  const db = getDb();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+  const rows = db.prepare(`
+    SELECT pr_number, repo, title, created_at, updated_at, review_count
+    FROM cached_pull_requests
+    WHERE developer_id = ? AND status = 'open'${repoSql}
+  `).all(devId, ...repoValues) as {
+    pr_number: number;
+    repo: string;
+    title: string;
+    created_at: string;
+    updated_at: string;
+    review_count: number;
+  }[];
+
+  const now = Date.now();
+  const msDay = 86400000;
+  const out: StaleOpenPRCandidate[] = [];
+
+  for (const row of rows) {
+    if (row.review_count > 0) continue;
+    const ageDays = (now - new Date(row.created_at).getTime()) / msDay;
+    if (ageDays >= dangerDays) {
+      out.push({
+        repo: row.repo,
+        prNumber: row.pr_number,
+        title: row.title,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        reviewCount: row.review_count,
+        level: "danger",
+      });
+    } else if (ageDays >= warnDays) {
+      out.push({
+        repo: row.repo,
+        prNumber: row.pr_number,
+        title: row.title,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        reviewCount: row.review_count,
+        level: "warn",
+      });
+    }
+  }
+  return out;
 }
 
 export function computeCachedMergeRatio(devId: string, days: number, repos?: { org: string; name: string }[]): number {
@@ -247,7 +359,7 @@ export function getCachedMyOpenPRReviewItems(
   }[];
 
   return rows.map((row) => {
-    let pending: string[] = [];
+    let pending: string[];
     try {
       const parsed = row.pending_reviewers_json ? JSON.parse(row.pending_reviewers_json) : [];
       pending = Array.isArray(parsed) ? parsed.filter((p: unknown) => typeof p === "string") : [];

@@ -1,12 +1,13 @@
 // @ts-nocheck — fetch().json() returns unknown in strict mode
 import { getDb } from "../db/index";
-import { getConnection } from "../db/connections";
+import { getConnection, hasUsableToken } from "../db/connections";
 import { getDeveloper } from "../db/developers";
 import { getSourcesForDeveloper } from "../db/sources";
 import {
   fetchContributionCalendar,
   fetchReviewRequests,
   latestReviewStateFromReviews,
+  earliestReviewSubmittedAt,
   mergedAtFromSearchIssueItem,
 } from "../services/github";
 
@@ -41,27 +42,31 @@ async function enrichPullForCache(pr: SearchPRItem, token: string) {
       ? pr.review_comments
       : (pr.requested_reviewers?.length ?? 0);
   let latestState = null;
+  let firstReviewSubmittedAt: string | null = null;
   const pendingLogins = (pr.requested_reviewers ?? []).map((r) => r.login);
   let pendingJson = JSON.stringify(pendingLogins);
 
-  if (pr.state === "open") {
-    try {
-      const res = await fetch(`${GITHUB_API}/repos/${repoPath}/pulls/${pr.number}/reviews`, {
-        headers: headers(token),
-      });
-      if (res.ok) {
-        const reviews = await res.json();
+  try {
+    const res = await fetch(`${GITHUB_API}/repos/${repoPath}/pulls/${pr.number}/reviews`, {
+      headers: headers(token),
+    });
+    if (res.ok) {
+      const reviews = await res.json();
+      if (Array.isArray(reviews)) {
         reviewCount = reviews.length;
         latestState = latestReviewStateFromReviews(reviews);
+        firstReviewSubmittedAt = earliestReviewSubmittedAt(reviews);
       }
-    } catch {
-      /* ignore */
     }
-  } else {
+  } catch {
+    /* ignore */
+  }
+
+  if (pr.state !== "open") {
     pendingJson = "[]";
   }
 
-  return { pr, repoPath, reviewCount, latestState, pendingJson };
+  return { pr, repoPath, reviewCount, latestState, pendingJson, firstReviewSubmittedAt };
 }
 
 // ---------- Contributions Sync ----------
@@ -70,7 +75,7 @@ export async function syncContributions(developerId: string): Promise<void> {
   const db = getDb();
   const dev = getDeveloper(developerId);
   const ghConn = getConnection("github");
-  if (!dev?.githubUsername || !ghConn?.connected || !ghConn.token) return;
+  if (!dev?.githubUsername || !hasUsableToken(ghConn)) return;
 
   setSyncStatus(developerId, "github_contributions", "syncing");
 
@@ -102,7 +107,7 @@ export async function syncPullRequests(developerId: string): Promise<void> {
   const db = getDb();
   const dev = getDeveloper(developerId);
   const ghConn = getConnection("github");
-  if (!dev?.githubUsername || !ghConn?.connected || !ghConn.token) return;
+  if (!dev?.githubUsername || !hasUsableToken(ghConn)) return;
 
   const token = ghConn.token;
   const username = dev.githubUsername;
@@ -176,8 +181,8 @@ export async function syncPullRequests(developerId: string): Promise<void> {
 
     const upsert = db.prepare(`
       INSERT OR REPLACE INTO cached_pull_requests
-        (developer_id, pr_number, repo, title, status, review_count, created_at, updated_at, merged_at, latest_review_state, pending_reviewers_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (developer_id, pr_number, repo, title, status, review_count, created_at, updated_at, merged_at, latest_review_state, pending_reviewers_json, first_review_submitted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertReviewReq = db.prepare(`
@@ -208,6 +213,7 @@ export async function syncPullRequests(developerId: string): Promise<void> {
           mergedAt,
           e.latestState,
           e.pendingJson,
+          e.firstReviewSubmittedAt,
         );
 
         if (pr.updated_at > latestUpdated) latestUpdated = pr.updated_at;
@@ -235,7 +241,7 @@ export async function syncPRReviewComments(developerId: string): Promise<void> {
   const db = getDb();
   const dev = getDeveloper(developerId);
   const ghConn = getConnection("github");
-  if (!dev?.githubUsername || !ghConn?.connected || !ghConn.token) return;
+  if (!dev?.githubUsername || !hasUsableToken(ghConn)) return;
 
   const token = ghConn.token;
   const username = dev.githubUsername;

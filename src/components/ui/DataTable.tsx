@@ -12,8 +12,8 @@ import {
   type ColumnFiltersState,
   type PaginationState,
 } from "@tanstack/react-table";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyColumnDef<T> = ColumnDef<T, any>;
+
+type AnyColumnDef<T> = ColumnDef<T, unknown>;
 import { useState } from "react";
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 

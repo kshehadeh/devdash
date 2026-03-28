@@ -59,7 +59,6 @@ export function useIpc<T>(
     invoke<T>(channel, ...parsed)
       .then((data) => setState({ data, loading: false, error: null }))
       .catch((err) => setState({ data: null, loading: false, error: err?.message ?? "IPC call failed" }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel, argsKey]);
 
   useEffect(() => {

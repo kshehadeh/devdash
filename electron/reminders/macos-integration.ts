@@ -95,7 +95,7 @@ export async function createMacOSReminder(
     await execAppleScript(script, 10000);
   } catch (err) {
     console.error("Failed to create macOS reminder:", err);
-    throw new Error("Failed to sync to macOS Reminders");
+    throw new Error("Failed to sync to macOS Reminders", { cause: err });
   }
 }
 

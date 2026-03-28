@@ -62,6 +62,13 @@ function rowToModel(row: DbRow): ConnectionRecord {
   };
 }
 
+/** True when a decrypted token exists. Prefer over `connected` for sync/API gates — the DB flag can be out of sync. */
+export function hasUsableToken(
+  conn: ConnectionRecord | null | undefined,
+): conn is ConnectionRecord & { token: string } {
+  return Boolean(conn?.token?.trim());
+}
+
 export function getConnection(id: ConnectionId): ConnectionRecord | null {
   const db = getDb();
   const row = db.prepare("SELECT * FROM connections WHERE id = ?").get(id) as DbRow | undefined;

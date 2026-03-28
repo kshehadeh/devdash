@@ -19,6 +19,10 @@ function getNotificationSubtext(n: NotificationRecord): string | null {
       const author = typeof payload.authorLogin === "string" ? payload.authorLogin : null;
       return author ? `Requested by @${author}` : null;
     }
+    case "github_stale_pr": {
+      const level = typeof payload.level === "string" ? payload.level : null;
+      return level === "danger" ? "No reviews yet (stale)" : level === "warn" ? "Waiting for first review" : null;
+    }
     case "assigned_or_watched_ticket_updated": {
       const status = typeof payload.status === "string" ? payload.status : null;
       return status ?? null;

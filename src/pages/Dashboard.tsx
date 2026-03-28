@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Github, BookOpen, Calendar, Ticket, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback, Fragment } from "react";
+import { Github, BookOpen, Calendar, Ticket, FileText, LayoutGrid } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Card } from "@/components/ui/Card";
 import { CardSkeleton } from "@/components/ui/CardSkeleton";
@@ -10,8 +10,9 @@ import { PullRequestList } from "@/components/dashboard/PullRequestList";
 import { ConfluenceSection } from "@/components/dashboard/ConfluenceSection";
 import { JiraTicketList } from "@/components/dashboard/JiraTicketList";
 import { TriggeredRemindersBanner } from "@/components/reminders/TriggeredRemindersBanner";
+import { DashboardCustomizeDialog } from "@/components/dashboard/DashboardCustomizeDialog";
+import { type DashboardWidgetId, parseDashboardLayoutJson } from "@/lib/dashboard-widgets";
 import { invoke, useIpc, type ContextMenuAction } from "@/lib/api";
-import { useAppStatus } from "@/context/AppStatusContext";
 import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import type {
   Developer,
@@ -38,8 +39,40 @@ export default function DashboardPage() {
     return stored ? parseInt(stored, 10) : 30;
   });
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const { syncing, refreshSyncStatus } = useAppStatus();
+  const [widgetLayout, setWidgetLayout] = useState<DashboardWidgetId[]>(() => parseDashboardLayoutJson(undefined));
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportMd, setReportMd] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+
+  useEffect(() => {
+    void invoke<string | null>("app-config:get", { key: "dashboard_widget_layout_json" }).then((raw) =>
+      setWidgetLayout(parseDashboardLayoutJson(raw ?? undefined)),
+    );
+  }, []);
+
+  const reloadLayout = useCallback(() => {
+    void invoke<string | null>("app-config:get", { key: "dashboard_widget_layout_json" }).then((raw) =>
+      setWidgetLayout(parseDashboardLayoutJson(raw ?? undefined)),
+    );
+  }, []);
+
+  const exportWeeklyReport = useCallback(async () => {
+    if (!selectedDevId) return;
+    setReportLoading(true);
+    try {
+      const md = await invoke<string>("stats:weekly-report-markdown", {
+        developerId: selectedDevId,
+        days: lookbackDays,
+      });
+      setReportMd(md);
+      setReportOpen(true);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setReportLoading(false);
+    }
+  }, [selectedDevId, lookbackDays]);
 
   // Global context menu action listener
   useEffect(() => {
@@ -82,24 +115,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setSelectedDevId]);
 
   useEffect(() => {
     fetchDevelopers();
   }, [fetchDevelopers]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await invoke("sync:trigger", { developerId: selectedDevId });
-      await new Promise((r) => setTimeout(r, 400));
-      await refreshSyncStatus();
-    } catch (err) {
-      console.error("Failed to trigger sync:", err);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [selectedDevId, refreshSyncStatus]);
 
   const github = useIpc<GithubStatsResponse>(selectedDevId ? "stats:code" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
   const velocity = useIpc<VelocityStatsResponse>(selectedDevId ? "stats:velocity" : null, [{ developerId: selectedDevId, days: lookbackDays }]);
@@ -152,20 +172,32 @@ export default function DashboardPage() {
                   Code, work tracking, and documentation metrics from your connected tools
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <button
-                  onClick={handleRefresh}
-                  disabled={refreshing || syncing}
+                  type="button"
+                  onClick={() => void exportWeeklyReport()}
+                  disabled={reportLoading}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--surface-container-high)] transition-colors disabled:opacity-40"
-                  title="Sync data from connected integrations"
+                  title="Generate Markdown summary for the selected period"
                 >
-                  <RefreshCw size={14} className={`text-[var(--on-surface-variant)] ${refreshing || syncing ? "animate-spin" : ""}`} />
-                  <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Sync</span>
+                  <FileText size={14} className="text-[var(--on-surface-variant)]" />
+                  <span className="text-[10px] font-label text-[var(--on-surface-variant)]">
+                    {reportLoading ? "…" : "Report"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomizeOpen(true)}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--surface-container-high)] transition-colors"
+                  title="Show or hide dashboard sections"
+                >
+                  <LayoutGrid size={14} className="text-[var(--on-surface-variant)]" />
+                  <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Layout</span>
                 </button>
 
-                <div className="w-px h-4 bg-[var(--outline-variant)]/30" />
+                <div className="w-px h-4 bg-[var(--outline-variant)]/30 hidden sm:block" />
 
-                <Calendar size={14} className="text-[var(--on-surface-variant)]" />
+                <Calendar size={14} className="text-[var(--on-surface-variant)] shrink-0" />
                 <div className="flex bg-[var(--surface-container)] rounded-md overflow-hidden">
                   {LOOKBACK_OPTIONS.map((opt) => (
                     <button
@@ -184,129 +216,156 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <MetricsBar
-              lookbackDays={lookbackDays}
-              velocity={velocity.data}
-              tickets={tickets.data}
-              confluence={confluence.data}
-              velocityLoading={velocity.loading}
-              ticketsLoading={tickets.loading}
-              confluenceLoading={confluence.loading}
-            />
-
-            <div className="mt-6">
-              <TriggeredRemindersBanner />
-            </div>
-
-            <div className="mt-6 flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-4">
-                {/* Pull Requests */}
-                {github.loading ? (
-                  <CardSkeleton lines={5} />
-                ) : github.data ? (
-                  <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Github size={16} className="text-[var(--primary)]" />
-                        <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          Pull Requests
-                        </h3>
-                        {github.data.pullRequests.length > 0 && (
-                          <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
-                            {github.data.pullRequests.length}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-label text-[var(--on-surface-variant)]">
-                        Last {lookbackDays} days
-                      </span>
-                    </div>
-                    <PullRequestList prs={github.data.pullRequests} />
-                  </Card>
-                ) : null}
-
-                {/* Open Tickets */}
-                {tickets.loading ? (
-                  <CardSkeleton lines={5} />
-                ) : tickets.data ? (
-                  <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Ticket size={16} className="text-[var(--primary)]" />
-                        <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          {tickets.data?.providerId === "linear" ? "Linear issues" : "Tickets"}
-                        </h3>
-                        {tickets.data.jiraTickets.length > 0 && (
-                          <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
-                            {tickets.data.jiraTickets.length}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                        Last {lookbackDays} days
-                      </span>
-                    </div>
-                    <JiraTicketList tickets={tickets.data.jiraTickets} onInvalidTicket={tickets.refresh} />
-                  </Card>
-                ) : null}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 items-start">
-                {/* Commit Activity + PR Review Comments stacked */}
-                <div className="flex flex-col gap-4">
-                  {github.loading ? (
-                    <CardSkeleton lines={8} />
-                  ) : github.data ? (
-                    <Card>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <Github size={16} className="text-[var(--primary)]" />
-                          <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                            Commit Activity
-                          </h3>
+            <div className="flex flex-col gap-6 mt-2">
+              {widgetLayout.map((wid) => (
+                <Fragment key={wid}>
+                  {wid === "metrics_bar" ? (
+                    <MetricsBar
+                      lookbackDays={lookbackDays}
+                      velocity={velocity.data}
+                      tickets={tickets.data}
+                      confluence={confluence.data}
+                      velocityLoading={velocity.loading}
+                      ticketsLoading={tickets.loading}
+                      confluenceLoading={confluence.loading}
+                    />
+                  ) : null}
+                  {wid === "triggered_reminders" ? <TriggeredRemindersBanner /> : null}
+                  {wid === "pull_requests" ? (
+                    github.loading ? (
+                      <CardSkeleton lines={5} />
+                    ) : github.data ? (
+                      <Card>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Github size={16} className="text-[var(--primary)]" />
+                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">Pull Requests</h3>
+                            {github.data.pullRequests.length > 0 && (
+                              <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
+                                {github.data.pullRequests.length}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Last {lookbackDays} days</span>
                         </div>
-                        <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                          Last {lookbackDays} days
-                        </span>
-                      </div>
-                      <CommitBarChart commits={github.data.commitHistory} lookbackDays={lookbackDays} />
-                    </Card>
+                        <PullRequestList prs={github.data.pullRequests} />
+                      </Card>
+                    ) : null
                   ) : null}
-
-                  {reviewComments.loading ? (
-                    <CardSkeleton lines={5} />
-                  ) : reviewComments.data ? (
-                    <Card>
-                      <PRCommentBarChart
-                        commentDays={reviewComments.data.commentDays}
-                        totalComments={reviewComments.data.totalComments}
-                        lookbackDays={lookbackDays}
-                      />
-                    </Card>
+                  {wid === "open_tickets" ? (
+                    tickets.loading ? (
+                      <CardSkeleton lines={5} />
+                    ) : tickets.data ? (
+                      <Card>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Ticket size={16} className="text-[var(--primary)]" />
+                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">
+                              {tickets.data?.providerId === "linear" ? "Linear issues" : "Tickets"}
+                            </h3>
+                            {tickets.data.jiraTickets.length > 0 && (
+                              <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
+                                {tickets.data.jiraTickets.length}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                            Last {lookbackDays} days
+                          </span>
+                        </div>
+                        <JiraTicketList tickets={tickets.data.jiraTickets} onInvalidTicket={tickets.refresh} />
+                      </Card>
+                    ) : null
                   ) : null}
-                </div>
-
-                {/* Confluence */}
-                {confluence.loading ? (
-                  <CardSkeleton lines={5} />
-                ) : confluence.data ? (
-                  <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <BookOpen size={16} className="text-[var(--primary)]" />
-                        <h3 className="text-sm font-semibold text-[var(--on-surface)]">
-                          Documentation
-                        </h3>
-                      </div>
-                      <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                        Recent
-                      </span>
-                    </div>
-                    <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
-                  </Card>
-                ) : null}
-              </div>
+                  {wid === "commit_activity" ? (
+                    github.loading ? (
+                      <CardSkeleton lines={8} />
+                    ) : github.data ? (
+                      <Card>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Github size={16} className="text-[var(--primary)]" />
+                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">Commit Activity</h3>
+                          </div>
+                          <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
+                            Last {lookbackDays} days
+                          </span>
+                        </div>
+                        <CommitBarChart commits={github.data.commitHistory} lookbackDays={lookbackDays} />
+                      </Card>
+                    ) : null
+                  ) : null}
+                  {wid === "pr_review_comments" ? (
+                    reviewComments.loading ? (
+                      <CardSkeleton lines={5} />
+                    ) : reviewComments.data ? (
+                      <Card>
+                        <PRCommentBarChart
+                          commentDays={reviewComments.data.commentDays}
+                          totalComments={reviewComments.data.totalComments}
+                          lookbackDays={lookbackDays}
+                        />
+                      </Card>
+                    ) : null
+                  ) : null}
+                  {wid === "documentation" ? (
+                    confluence.loading ? (
+                      <CardSkeleton lines={5} />
+                    ) : confluence.data ? (
+                      <Card>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <BookOpen size={16} className="text-[var(--primary)]" />
+                            <h3 className="text-sm font-semibold text-[var(--on-surface)]">Documentation</h3>
+                          </div>
+                          <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">Recent</span>
+                        </div>
+                        <ConfluenceSection docs={confluence.data.confluenceDocs} activity={confluence.data.confluenceActivity} />
+                      </Card>
+                    ) : null
+                  ) : null}
+                </Fragment>
+              ))}
             </div>
+
+            <DashboardCustomizeDialog open={customizeOpen} onClose={() => setCustomizeOpen(false)} onSaved={reloadLayout} />
+
+            {reportOpen ? (
+              <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50">
+                <div className="bg-[var(--surface-container-highest)] rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col border border-[var(--outline-variant)]/30">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-variant)]/20">
+                    <h2 className="text-sm font-semibold text-[var(--on-surface)]">Weekly report (Markdown)</h2>
+                    <button
+                      type="button"
+                      onClick={() => setReportOpen(false)}
+                      className="text-xs font-label text-[var(--primary)]"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <textarea
+                    readOnly
+                    className="flex-1 min-h-[240px] m-3 p-3 rounded-md bg-[var(--surface-container)] text-xs font-mono text-[var(--on-surface)] border border-[var(--outline-variant)]/20"
+                    value={reportMd}
+                  />
+                  <div className="flex justify-end gap-2 px-4 py-3 border-t border-[var(--outline-variant)]/20">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(reportMd);
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-label rounded-md bg-[var(--primary)] text-[var(--on-primary)]"
+                    >
+                      Copy to clipboard
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </>
         )}
       </main>

@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { hasUsableToken } from "../db/connections";
 import { getStatsContext } from "./stats-context";
 import {
   hasFreshCache,
@@ -26,7 +27,7 @@ export function registerReviewsHandlers() {
       return { ...empty, error: "Add a GitHub username for this developer in their profile." };
     }
 
-    if (!ctx.ghConn?.connected || !ctx.ghConn.token) {
+    if (!hasUsableToken(ctx.ghConn)) {
       return { ...empty, error: "Connect GitHub in Settings to load reviews." };
     }
 

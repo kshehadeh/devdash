@@ -17,7 +17,11 @@ export interface PullRequest {
   url: string;
   status: "merged" | "open" | "closed";
   reviewCount?: number;
+  createdAt: string;
   updatedAt: string;
+  mergedAt?: string | null;
+  /** Earliest submitted PR review (GitHub), when known from sync */
+  firstReviewSubmittedAt?: string | null;
   timeAgo: string;
   isActive?: boolean;
 }
@@ -55,26 +59,6 @@ export interface ReviewsResponse {
   error?: string;
   /** Present when served from pull-request cache after a successful sync */
   _syncedAt?: string;
-}
-
-export interface SprintIssue {
-  id: string;
-  key: string;
-  title: string;
-  status: "todo" | "in_progress" | "done";
-  points: number;
-  priority: "low" | "medium" | "high" | "critical";
-}
-
-export interface Sprint {
-  name: string;
-  currentDay: number;
-  totalDays: number;
-  status: "on_track" | "at_risk" | "blocked";
-  cycleTime: number;
-  throughput: number;
-  overdueCount: number;
-  issues: SprintIssue[];
 }
 
 export interface ConfluenceDoc {
@@ -125,15 +109,8 @@ export interface DeveloperStats {
   commitHistory: CommitDay[];
   pullRequests: PullRequest[];
   jiraTickets: JiraTicket[];
-  sprint: Sprint;
   confluenceDocs: ConfluenceDoc[];
   confluenceActivity: ConfluenceActivity[];
-  effortDistribution: {
-    feature: number;
-    bugFix: number;
-    codeReview: number;
-  };
-  performanceTrajectory: "exceptional" | "strong" | "on_track" | "needs_improvement";
 }
 
 // Per-section API response types for progressive loading
@@ -142,7 +119,6 @@ export interface GithubStatsResponse {
   commitHistory: CommitDay[];
   commitsYTD: number;
   pullRequests: PullRequest[];
-  effortDistribution: { feature: number; bugFix: number; codeReview: number };
   /** Present when served through the integration layer */
   providerId?: "github";
   _syncedAt?: string;
@@ -152,12 +128,10 @@ export interface VelocityStatsResponse {
   velocity: number;
   velocityChange: number;
   mergeRatio: number;
+  /** Mean hours from PR creation to first submitted review (cached PRs in lookback with known first review); 0 if unknown */
+  reviewTurnaroundHours: number;
   providerId?: "github";
   _syncedAt?: string;
-}
-
-export interface SprintStatsResponse {
-  sprint: Sprint;
 }
 
 export interface TicketsStatsResponse {
@@ -180,6 +154,32 @@ export interface PRReviewCommentsResponse {
   commentDays: CommitDay[];
   totalComments: number;
   _syncedAt?: string;
+}
+
+export interface TeamOverviewRow {
+  developerId: string;
+  name: string;
+  velocity: number;
+  mergeRatio: number;
+  reviewTurnaroundHours: number;
+  workloadHealth: number;
+  ticketVelocity: number;
+  openPrCount: number;
+  pendingReviewCount: number;
+}
+
+export interface TeamOverviewResponse {
+  days: number;
+  rows: TeamOverviewRow[];
+}
+
+export interface GlobalSearchResult {
+  kind: "pr" | "ticket" | "reminder" | "notification" | "nav";
+  id: string;
+  title: string;
+  subtitle: string;
+  openUrl: string | null;
+  navigatePath: string | null;
 }
 
 export interface PRReviewComment {

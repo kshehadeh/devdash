@@ -637,7 +637,7 @@ function OnboardingDeveloperForm({
     atlassianEmail: "",
   });
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
-  const [submitting, setSubmitting] = useState(false);
+  const [, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function set(field: keyof typeof values) {

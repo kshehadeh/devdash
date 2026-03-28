@@ -74,6 +74,7 @@ Fingerprint must be stable for a “same event” and change for a “meaningful
 Good patterns:
 
 - GitHub review requested: `repo + prNumber + updatedAt`
+- GitHub stale authored PR (cache-only): `repo + prNumber + updatedAt` while PR matches “open, zero reviews, age ≥ threshold”
 - Jira ticket update: `issueKey + updatedAt`
 - Comment-based signals: `issueKey + commentId + updatedAt`
 

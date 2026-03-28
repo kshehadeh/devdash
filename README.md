@@ -5,19 +5,23 @@ A desktop developer dashboard that aggregates your code, work tracking, and docu
 
 ## Features
 
-- **Ecosystem Impact metrics** — velocity, merge ratio, workload health, ticket throughput, and documentation authority at a glance
-- **GitHub contributions** — heatmap, pull request history, and effort distribution (feature / bug fix / review)
+- **Ecosystem Impact metrics** — velocity, merge ratio, **review turnaround** (time to first review), workload health, ticket throughput, and documentation authority at a glance
+- **GitHub** — contribution history, pull request list (staleness hints, merge timing), commit activity, and review-comment activity
 - **Work tracking** — Jira or Linear issues with status categories and workload scoring
 - **Documentation** — Confluence page edits, reads, and knowledge influence
+- **My Day** — single view for reviews waiting on you, in-progress tickets, triggered reminders, and notification status
+- **Team overview** — compare tracked developers in one table; jump to an individual dashboard
+- **Weekly Markdown report** — one-click summary of the selected lookback for status updates or reviews
+- **Command palette (⌘K / Ctrl+K)** — search PRs, tickets, reminders, notifications, and pages
 - **Multi-developer support** — track metrics for yourself or your team
 - **Offline-first** — SQLite cache with background sync so the dashboard loads instantly
 - **Auto-updates** — built-in update mechanism via GitHub Releases
 
 ### Dashboard widgets
 
-The dashboard presents your engineering activity through modular widgets that refresh based on your selected time window (7, 14, 30, 60, or 90 days):
+The dashboard presents your engineering activity through modular widgets that refresh based on your selected time window (7, 14, 30, 60, or 90 days). Use **Layout** on the dashboard to show, hide, and reorder sections.
 
-- **Pull Requests** — Open and merged PRs with staleness indicators, review counts, and quick access to GitHub
+- **Pull Requests** — Open and merged PRs with staleness indicators, review counts, merge timing, and quick access to GitHub
 - **Commit Activity** — Daily commit bar chart showing coding velocity over the selected period
 - **PR Review Comments** — Bar chart tracking your review participation and collaboration activity
 - **Open Tickets** — Current Jira or Linear issues with status, priority, and workload scoring
@@ -103,7 +107,7 @@ The product is organized around three integration categories — **Code**, **Wor
 | Work | Jira, Linear |
 | Docs | Confluence |
 
-See [docs/architecture.md](docs/architecture.md) for the full system design, [docs/metrics.md](docs/metrics.md) for metric definitions, and [docs/notifications.md](docs/notifications.md) for the integration notification system.
+See [docs/architecture.md](docs/architecture.md) for the full system design, [docs/features.md](docs/features.md) for My Day, Team, command palette, layout, and reports, [docs/metrics.md](docs/metrics.md) for metric definitions, [docs/notifications.md](docs/notifications.md) for the integration notification system, and [docs/roadmap.md](docs/roadmap.md) for the product roadmap and feature status.
 
 ## Contributing
 

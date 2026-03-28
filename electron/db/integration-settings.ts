@@ -23,7 +23,7 @@ function normalize(state: Partial<IntegrationSettingsState> | null): Integration
 
 export function getIntegrationSettings(): IntegrationSettingsState {
   const db = getDb();
-  let rows: Row[] = [];
+  let rows: Row[];
   try {
     rows = db.prepare("SELECT category, provider_id FROM integration_settings").all() as Row[];
   } catch {

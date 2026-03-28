@@ -1,9 +1,12 @@
 "use client";
 
-import { X } from "lucide-react";
+import { useCallback, useState } from "react";
+import { RefreshCw, X } from "lucide-react";
 import { clsx } from "clsx";
 import { useAppStatus } from "@/context/AppStatusContext";
+import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import { StatusBarPersistentMessages } from "@/components/layout/StatusBarPersistentMessages";
+import { invoke } from "@/lib/api";
 import type { AppNotificationType, SyncProgressPayload } from "@/lib/types";
 
 function formatSyncTime(isoDate: string): string {
@@ -51,9 +54,25 @@ const notifyStyles: Record<AppNotificationType, string> = {
 };
 
 export function StatusBar() {
-  const { syncing, progress, lastSyncedAt, notifications, dismissNotification } = useAppStatus();
+  const { selectedDevId } = useSelectedDeveloper();
+  const { syncing, progress, lastSyncedAt, notifications, dismissNotification, refreshSyncStatus } = useAppStatus();
+  const [triggering, setTriggering] = useState(false);
   const pct = progressFraction(progress);
   const detail = activeDetail(progress);
+  const spin = syncing || triggering;
+
+  const handleSync = useCallback(async () => {
+    setTriggering(true);
+    try {
+      await invoke("sync:trigger", selectedDevId ? { developerId: selectedDevId } : {});
+      await new Promise((r) => setTimeout(r, 400));
+      await refreshSyncStatus();
+    } catch (err) {
+      console.error("Failed to trigger sync:", err);
+    } finally {
+      setTriggering(false);
+    }
+  }, [selectedDevId, refreshSyncStatus]);
 
   return (
     <div
@@ -98,6 +117,20 @@ export function StatusBar() {
               )}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => void handleSync()}
+            disabled={spin}
+            className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md hover:bg-[var(--surface-container-high)] transition-colors disabled:opacity-40"
+            title={
+              selectedDevId
+                ? "Sync data from connected integrations for the selected developer"
+                : "Sync all developers from connected integrations"
+            }
+          >
+            <RefreshCw size={14} className={clsx("text-[var(--on-surface-variant)]", spin && "animate-spin")} />
+            <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Sync</span>
+          </button>
         </div>
 
         {notifications.length > 0 && (

@@ -11,7 +11,6 @@ import {
   deleteReminder,
   type CreateReminderInput,
   type ListRemindersOptions,
-  type ReminderStatus,
   type UpdateReminderInput,
 } from "../db/reminders";
 import { getCurrentUserDeveloper } from "../db/developers";

@@ -100,7 +100,7 @@ export default function ReviewsPage() {
     } finally {
       setLoadingDevs(false);
     }
-  }, []);
+  }, [setSelectedDevId]);
 
   useEffect(() => {
     fetchDevelopers();
@@ -109,17 +109,21 @@ export default function ReviewsPage() {
   const reviews = useIpc<ReviewsResponse>(selectedDevId ? "reviews:get" : null, [{ developerId: selectedDevId }]);
 
   const pollCount = useRef(0);
-  useEffect(() => {
-    if (!selectedDevId || reviews.loading) return;
-    if (reviews.data?._syncedAt || reviews.data?.error) return;
-    pollCount.current = 0;
-    const id = window.setInterval(() => {
-      pollCount.current += 1;
-      reviews.refresh();
-      if (pollCount.current >= 30) window.clearInterval(id);
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, [selectedDevId, reviews.loading, reviews.data?._syncedAt, reviews.data?.error, reviews.refresh]);
+  useEffect(
+    () => {
+      if (!selectedDevId || reviews.loading) return;
+      if (reviews.data?._syncedAt || reviews.data?.error) return;
+      pollCount.current = 0;
+      const id = window.setInterval(() => {
+        pollCount.current += 1;
+        reviews.refresh();
+        if (pollCount.current >= 30) window.clearInterval(id);
+      }, 2000);
+      return () => window.clearInterval(id);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- narrow deps so interval is not reset on every reviews reference change
+    [selectedDevId, reviews.loading, reviews.data?._syncedAt, reviews.data?.error, reviews.refresh],
+  );
 
   const hasNoDev = developers.length === 0;
   const noDevSelected = !selectedDevId;
@@ -175,7 +179,7 @@ export default function ReviewsPage() {
               </p>
               {!reviews.data.error && !reviews.data._syncedAt ? (
                 <p className="text-xs text-[var(--on-surface-variant)] mt-2">
-                  Lists appear after pull requests finish syncing. Open the dashboard and use Sync, or wait for background sync.
+                  Lists appear after pull requests finish syncing. Use Sync in the status bar, or wait for background sync.
                 </p>
               ) : null}
               {reviews.data._syncedAt ? (

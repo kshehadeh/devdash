@@ -16,19 +16,31 @@ import NotificationsSettings from "./pages/settings/Notifications";
 import Reviews from "./pages/Reviews";
 import NotificationsPage from "./pages/notifications/NotificationsPage";
 import RemindersPage from "./pages/reminders/RemindersPage";
+import MyDayPage from "./pages/MyDay";
+import TeamPage from "./pages/Team";
 import Onboarding from "./pages/Onboarding";
 import { invoke } from "./lib/api";
+import { useSelectedDeveloper } from "./context/SelectedDeveloperContext";
+import { CommandPalette } from "./components/CommandPalette";
+
+function MainLayoutInner() {
+  const { selectedDevId } = useSelectedDeveloper();
+  return (
+    <div className="flex h-full w-full min-h-0 flex-1">
+      <Sidebar />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-12">
+        <Outlet />
+        <StatusBar />
+      </div>
+      <CommandPalette developerId={selectedDevId || null} />
+    </div>
+  );
+}
 
 function MainLayout() {
   return (
     <SelectedDeveloperProvider>
-      <div className="flex h-full w-full min-h-0 flex-1">
-        <Sidebar />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-12">
-          <Outlet />
-          <StatusBar />
-        </div>
-      </div>
+      <MainLayoutInner />
     </SelectedDeveloperProvider>
   );
 }
@@ -80,6 +92,8 @@ function RoutedApp() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route element={<MainLayout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/my-day" element={<MyDayPage />} />
+        <Route path="/team" element={<TeamPage />} />
         <Route path="/reviews" element={<Reviews />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/reminders" element={<RemindersPage />} />

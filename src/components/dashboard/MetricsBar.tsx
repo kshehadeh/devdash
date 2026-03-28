@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp, GitMerge, Activity, Ticket, BookOpen, Info, type LucideIcon } from "lucide-react";
+import { TrendingUp, GitMerge, Activity, Ticket, BookOpen, Info, Timer, type LucideIcon } from "lucide-react";
 import { MetricSkeleton } from "../ui/CardSkeleton";
 import type { VelocityStatsResponse, TicketsStatsResponse, ConfluenceStatsResponse } from "../../../lib/types";
 
@@ -75,10 +75,15 @@ export function MetricsBar({
 }: MetricsBarProps) {
   const periodLabel = `Last ${lookbackDays}d`;
 
+  const rt = velocity?.reviewTurnaroundHours ?? 0;
+  const rtLabel =
+    rt <= 0 ? "—" : rt < 24 ? `${rt}h` : `${Math.round((rt / 24) * 10) / 10}d`;
+
   return (
-    <div className="grid grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {velocityLoading || !velocity ? (
         <>
+          <MetricSkeleton />
           <MetricSkeleton />
           <MetricSkeleton />
         </>
@@ -101,6 +106,15 @@ export function MetricsBar({
             subColor={velocity.mergeRatio >= 90 ? "text-emerald-400" : velocity.mergeRatio >= 70 ? "text-[var(--primary)]" : "text-[var(--error)]"}
             period={periodLabel}
             description="Among PRs you opened (created) in the selected period, the share that merged. Based on creation date, not merge date. Higher means fewer closed-unmerged in that cohort."
+          />
+          <MetricCard
+            icon={Timer}
+            label="Review turnaround"
+            value={rt <= 0 ? "—" : rtLabel}
+            sub={rt <= 0 ? "no data" : "avg to 1st review"}
+            subColor={rt <= 0 ? "text-[var(--on-surface-variant)]" : rt <= 48 ? "text-emerald-400" : rt <= 120 ? "text-[var(--primary)]" : "text-amber-400"}
+            period={periodLabel}
+            description="Mean time from PR creation to first submitted review, for your PRs in this period that have at least one review (cached GitHub data after sync)."
           />
         </>
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, useLocation } from "react-router-dom";
-import { Bell, ClipboardCheck, LayoutDashboard, Settings, AlarmClock } from "lucide-react";
+import { Bell, ClipboardCheck, LayoutDashboard, Settings, AlarmClock, Sun, Users } from "lucide-react";
 import { clsx } from "clsx";
 import { useEffect, useState, useCallback } from "react";
 import appIcon from "@/assets/icon-white.png";
@@ -10,6 +10,8 @@ import type { ReminderCountResponse } from "@/lib/types";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/my-day", icon: Sun, label: "My Day" },
+  { href: "/team", icon: Users, label: "Team" },
   { href: "/reviews", icon: ClipboardCheck, label: "Reviews" },
   { href: "/notifications", icon: Bell, label: "Notifications" },
   { href: "/reminders", icon: AlarmClock, label: "Reminders", badge: true },

@@ -2,7 +2,6 @@
 import type {
   CommitDay,
   PullRequest,
-  DeveloperStats,
   MyPRReviewItem,
   PullReviewState,
   ReviewRequestItem,
@@ -97,6 +96,19 @@ export function latestReviewStateFromReviews(reviews: { state: string }[]): Pull
     if (MEANINGFUL_REVIEW_STATES.has(s)) return s as PullReviewState;
   }
   return null;
+}
+
+/** Earliest `submitted_at` among reviews (GitHub PR reviews API). */
+export function earliestReviewSubmittedAt(reviews: { submitted_at?: string }[]): string | null {
+  let minMs: number | null = null;
+  for (const r of reviews) {
+    const raw = r.submitted_at;
+    if (typeof raw !== "string") continue;
+    const t = new Date(raw).getTime();
+    if (Number.isNaN(t)) continue;
+    if (minMs === null || t < minMs) minMs = t;
+  }
+  return minMs != null ? new Date(minMs).toISOString() : null;
 }
 
 /**
@@ -294,7 +306,10 @@ export async function fetchPullRequests(
         url: item.html_url,
         status,
         reviewCount: item.review_comments || item.requested_reviewers?.length || 0,
+        createdAt: item.created_at,
         updatedAt: item.updated_at,
+        mergedAt: mergedAtFromSearchIssueItem(item),
+        firstReviewSubmittedAt: null,
         timeAgo: timeAgo(item.updated_at),
         isActive: status === "open",
       });
@@ -400,32 +415,3 @@ export async function fetchVelocity(
   return { velocity, velocityChange };
 }
 
-const BUG_PATTERNS = /\b(fix|bug|patch|hotfix|issue|error|crash|broken)\b/i;
-const REVIEW_PATTERNS = /\b(review|refactor|cleanup|lint|style|format|rename|chore|ci|test)\b/i;
-
-export function classifyEffortDistribution(
-  prs: PullRequest[],
-): DeveloperStats["effortDistribution"] {
-  if (prs.length === 0) return { feature: 34, bugFix: 33, codeReview: 33 };
-
-  let bugFix = 0;
-  let feature = 0;
-
-  for (const pr of prs) {
-    const title = pr.title.toLowerCase();
-    if (BUG_PATTERNS.test(title)) {
-      bugFix++;
-    } else if (!REVIEW_PATTERNS.test(title)) {
-      feature++;
-    }
-  }
-
-  const total = prs.length;
-  const featurePct = Math.round((feature / total) * 100);
-  const bugFixPct = Math.round((bugFix / total) * 100);
-  return {
-    feature: featurePct,
-    bugFix: bugFixPct,
-    codeReview: Math.max(0, 100 - featurePct - bugFixPct),
-  };
-}

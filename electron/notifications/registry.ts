@@ -1,6 +1,8 @@
 import { getDeveloper } from "../db/developers";
-import { getConnection } from "../db/connections";
+import { getConnection, hasUsableToken } from "../db/connections";
+import { getConfig } from "../db/config";
 import { getSourcesForDeveloper } from "../db/sources";
+import { getCachedStaleOpenAuthoredPRs } from "../db/cache";
 import { getWorkEmailForDeveloper } from "../db/developer-identity";
 import { getIntegrationSettings } from "../db/integration-settings";
 import { fetchReviewRequests } from "../services/github";
@@ -29,6 +31,56 @@ export interface NotificationDefinition {
   sourceItemLabel: (record: NotificationRecord) => string;
 }
 
+function parseStaleDays(key: string, fallback: number): number {
+  const raw = getConfig(key);
+  const n = raw != null && raw !== "" ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const githubStaleAuthoredPR: NotificationDefinition = {
+  integration: "github",
+  notificationType: "github_stale_pr",
+  label: "Stale open PR (no reviews yet)",
+  defaultEnabled: false,
+  strategy: { id: "repo_pr_updated_stale", version: 1 },
+  async poll(developerId: string) {
+    const dev = getDeveloper(developerId);
+    if (!dev?.githubUsername) return [];
+    const repos = getSourcesForDeveloper(developerId)
+      .filter((s) => s.type === "github_repo")
+      .map((s) => ({ org: s.org, name: s.identifier }));
+    const warnDays = parseStaleDays("pr_stale_warn_days", 3);
+    const dangerDays = parseStaleDays("pr_stale_danger_days", 7);
+    const stale = getCachedStaleOpenAuthoredPRs(developerId, warnDays, dangerDays, repos.length ? repos : undefined);
+    return stale.map((s) => ({
+      title: s.level === "danger" ? `Stale PR: ${s.title}` : `PR waiting for review: ${s.title}`,
+      body: `${s.repo}#${s.prNumber} · open ${Math.floor((Date.now() - new Date(s.createdAt).getTime()) / 86400000)}d, no reviews yet`,
+      sourceUrl: `https://github.com/${s.repo}/pull/${s.prNumber}`,
+      eventUpdatedAt: s.updatedAt,
+      payload: {
+        repo: s.repo,
+        prNumber: s.prNumber,
+        level: s.level,
+      },
+    }));
+  },
+  fingerprint(event) {
+    const repo = typeof event.payload?.repo === "string" ? event.payload.repo : "unknown";
+    const prNumber = typeof event.payload?.prNumber === "number" ? event.payload.prNumber : 0;
+    return `${repo}:${prNumber}:${event.eventUpdatedAt}`;
+  },
+  sourceItemKey(record) {
+    const repo = typeof record.payload.repo === "string" ? record.payload.repo : "unknown";
+    const prNumber = typeof record.payload.prNumber === "number" ? record.payload.prNumber : 0;
+    return `${repo}:${prNumber}`;
+  },
+  sourceItemLabel(record) {
+    const repo = typeof record.payload.repo === "string" ? record.payload.repo : "unknown";
+    const prNumber = typeof record.payload.prNumber === "number" ? record.payload.prNumber : 0;
+    return `${repo} #${prNumber}: ${record.title}`;
+  },
+};
+
 const githubReviewRequested: NotificationDefinition = {
   integration: "github",
   notificationType: "review_requested",
@@ -38,7 +90,7 @@ const githubReviewRequested: NotificationDefinition = {
   async poll(developerId: string) {
     const dev = getDeveloper(developerId);
     const conn = getConnection("github");
-    if (!dev?.githubUsername || !conn?.connected || !conn.token) return [];
+    if (!dev?.githubUsername || !hasUsableToken(conn)) return [];
     const repos = getSourcesForDeveloper(developerId)
       .filter((s) => s.type === "github_repo")
       .map((s) => ({ org: s.org, name: s.identifier }));
@@ -155,6 +207,7 @@ const confluencePageEdited: NotificationDefinition = {
 
 const ALL_DEFINITIONS: NotificationDefinition[] = [
   githubReviewRequested,
+  githubStaleAuthoredPR,
   jiraUpdatedTickets,
   confluencePageEdited,
 ];

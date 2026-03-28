@@ -2,10 +2,6 @@ import { ipcMain } from "electron";
 import { listConnections, getConnection, saveConnection, deleteConnection } from "../db/connections";
 import type { ConnectionId } from "../db/connections";
 
-function maskToken(conn: Record<string, unknown> & { token?: string | null }) {
-  return { ...conn, token: conn.token ? "••••••••••••••••" : undefined };
-}
-
 function mask(conn: { token?: string | null }) {
   return { ...conn, token: conn.token ? "••••••••••••••••" : undefined };
 }

@@ -6,6 +6,12 @@ const ALLOWED_KEYS = new Set([
   "auto_update_enabled",
   "notifications_enabled",
   "notifications_poll_interval_ms",
+  /** Integer days — open authored PR with zero reviews and age ≥ this triggers warn-tier stale notifications */
+  "pr_stale_warn_days",
+  /** Integer days — same but danger-tier */
+  "pr_stale_danger_days",
+  /** JSON string: ordered dashboard widget ids for layout customization */
+  "dashboard_widget_layout_json",
 ]);
 
 export function registerAppConfigHandlers() {

@@ -14,6 +14,7 @@ import { registerNotificationHandlers } from "./notifications";
 import { registerReminderHandlers } from "./reminders";
 import { registerDevToolsHandlers } from "./dev-tools";
 import { registerContextMenuHandlers } from "./context-menu";
+import { registerSearchHandlers } from "./search";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
@@ -28,6 +29,7 @@ export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerSourceHandlers();
   registerCacheAdminHandlers();
   registerStatsHandlers();
+  registerSearchHandlers();
   registerSyncHandlers();
   registerDiscoverHandlers();
   registerReviewsHandlers();

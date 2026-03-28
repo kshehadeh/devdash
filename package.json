@@ -76,6 +76,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/inquirer": "^9.0.9",
@@ -88,9 +89,11 @@
     "electron": "^41.0.3",
     "electron-builder": "^26.8.1",
     "eslint": "^9",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "inquirer": "^13.3.2",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "typescript-eslint": "^8.57.2",
     "vite": "^8.0.1",
     "wait-on": "^9.0.4"
   },

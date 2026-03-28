@@ -1,22 +1,33 @@
 import { ipcMain } from "electron";
+import { hasUsableToken } from "../db/connections";
 import { getStatsContext } from "./stats-context";
 import {
-  fetchContributionCalendar, fetchPullRequests, classifyEffortDistribution,
+  fetchContributionCalendar, fetchPullRequests,
   fetchMergeRatio, fetchVelocity,
 } from "../services/github";
 import { fetchJiraTickets, fetchCompletedTicketCount, fetchConfluenceDocs, fetchConfluenceActivity } from "../services/atlassian";
 import {
   getCachedContributions, getCachedCommitsYTD, getCachedPullRequests,
   hasFreshCache, getSyncStatus,
-  computeCachedMergeRatio, computeCachedVelocity,
+  computeCachedMergeRatio, computeCachedVelocity, computeCachedReviewTurnaroundHours,
   getCachedJiraTickets, getCachedCompletedTicketCount,
   getCachedConfluencePages, getCachedConfluenceActivity,
   getCachedLinearTicketsAsJiraShape, getCachedLinearCompletedCount,
   getCachedPRReviewComments,
+  getCachedMyOpenPRReviewItems,
+  getCachedReviewRequestItems,
 } from "../db/cache";
+import { listDevelopers } from "../db/developers";
 import { syncDeveloper } from "../sync/engine";
 import type { JiraTicket, CommitDay, PullRequest, ConfluenceDoc, ConfluenceActivity } from "../types";
-import type { GithubStatsResponse, VelocityStatsResponse, TicketsStatsResponse, ConfluenceStatsResponse, PRReviewCommentsResponse } from "../types";
+import type {
+  GithubStatsResponse,
+  VelocityStatsResponse,
+  TicketsStatsResponse,
+  ConfluenceStatsResponse,
+  PRReviewCommentsResponse,
+  TeamOverviewResponse,
+} from "../types";
 
 function computeWorkloadHealth(tickets: JiraTicket[]): number {
   const inProgressCount = tickets.filter((t) => t.statusCategory === "in_progress").length;
@@ -35,7 +46,6 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
       commitHistory: [],
       commitsYTD: 0,
       pullRequests: [],
-      effortDistribution: { feature: 0, bugFix: 0, codeReview: 0 },
     };
   }
 
@@ -44,7 +54,6 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
       commitHistory: [],
       commitsYTD: 0,
       pullRequests: [],
-      effortDistribution: { feature: 0, bugFix: 0, codeReview: 0 },
       providerId: "github",
     };
   }
@@ -56,13 +65,11 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
     const commitHistory = getCachedContributions(id) ?? [];
     const commitsYTD = getCachedCommitsYTD(id);
     const pullRequests = getCachedPullRequests(id, days, ctx.repoFilter);
-    const effortDistribution = classifyEffortDistribution(pullRequests);
     const sync = getSyncStatus(id, "github_contributions") ?? getSyncStatus(id, "github_pull_requests");
     return {
       commitHistory,
       commitsYTD,
       pullRequests,
-      effortDistribution,
       providerId: "github",
       _syncedAt: sync?.lastSyncedAt,
     };
@@ -76,7 +83,7 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
   let commitsYTD = 0;
   let pullRequests: PullRequest[] = [];
 
-  if (ctx.ghConn?.connected && ctx.ghConn.token && ctx.ghUsername) {
+  if (hasUsableToken(ctx.ghConn) && ctx.ghUsername) {
     const prPromise =
       ctx.repoFilter.length > 0
         ? fetchPullRequests(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days)
@@ -98,7 +105,6 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
     commitHistory,
     commitsYTD,
     pullRequests,
-    effortDistribution: classifyEffortDistribution(pullRequests),
     providerId: "github",
   };
 }
@@ -106,21 +112,23 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
 async function buildVelocityStats(id: string, days: number): Promise<VelocityStatsResponse> {
   const ctx = getStatsContext(id, days);
   if (!ctx) {
-    return { velocity: 0, velocityChange: 0, mergeRatio: 0 };
+    return { velocity: 0, velocityChange: 0, mergeRatio: 0, reviewTurnaroundHours: 0 };
   }
 
   if (ctx.integration.code !== "github") {
-    return { velocity: 0, velocityChange: 0, mergeRatio: 0, providerId: "github" };
+    return { velocity: 0, velocityChange: 0, mergeRatio: 0, reviewTurnaroundHours: 0, providerId: "github" };
   }
 
   if (hasFreshCache(id, "github_pull_requests")) {
     const { velocity, velocityChange } = computeCachedVelocity(id, days, ctx.repoFilter);
     const mergeRatio = computeCachedMergeRatio(id, days, ctx.repoFilter);
+    const reviewTurnaroundHours = computeCachedReviewTurnaroundHours(id, days, ctx.repoFilter);
     const sync = getSyncStatus(id, "github_pull_requests");
     return {
       velocity,
       velocityChange,
       mergeRatio,
+      reviewTurnaroundHours,
       providerId: "github",
       _syncedAt: sync?.lastSyncedAt,
     };
@@ -131,7 +139,7 @@ async function buildVelocityStats(id: string, days: number): Promise<VelocitySta
   let velocityChange = 0;
   let mergeRatio = 0;
 
-  if (ctx.ghConn?.connected && ctx.ghConn.token && ctx.ghUsername && ctx.repoFilter.length > 0) {
+  if (hasUsableToken(ctx.ghConn) && ctx.ghUsername && ctx.repoFilter.length > 0) {
     const results = await Promise.allSettled([
       fetchMergeRatio(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days),
       fetchVelocity(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days),
@@ -143,7 +151,7 @@ async function buildVelocityStats(id: string, days: number): Promise<VelocitySta
     }
   }
 
-  return { velocity, velocityChange, mergeRatio, providerId: "github" };
+  return { velocity, velocityChange, mergeRatio, reviewTurnaroundHours: 0, providerId: "github" };
 }
 
 async function buildTicketsStats(id: string, days: number): Promise<TicketsStatsResponse> {
@@ -327,6 +335,96 @@ async function buildPRReviewCommentsStats(id: string, days: number): Promise<PRR
   };
 }
 
+async function buildTeamOverview(days: number): Promise<TeamOverviewResponse> {
+  const developers = listDevelopers();
+  const rows: TeamOverviewResponse["rows"] = [];
+
+  for (const d of developers) {
+    const ctx = getStatsContext(d.id, days);
+    if (!ctx) continue;
+
+    const velocity = await buildVelocityStats(d.id, days);
+    const tickets = await buildTicketsStats(d.id, days);
+
+    let openPrCount = 0;
+    let pendingReviewCount = 0;
+    if (ctx.integration.code === "github") {
+      openPrCount = getCachedMyOpenPRReviewItems(d.id, ctx.repoFilter).length;
+      pendingReviewCount = getCachedReviewRequestItems(d.id, ctx.repoFilter).length;
+    }
+
+    rows.push({
+      developerId: d.id,
+      name: d.name,
+      velocity: velocity.velocity,
+      mergeRatio: velocity.mergeRatio,
+      reviewTurnaroundHours: velocity.reviewTurnaroundHours,
+      workloadHealth: tickets.workloadHealth,
+      ticketVelocity: tickets.ticketVelocity,
+      openPrCount,
+      pendingReviewCount,
+    });
+  }
+
+  return { days, rows };
+}
+
+async function buildWeeklyReportMarkdown(developerId: string, days: number): Promise<string> {
+  const gh = await buildGithubStats(developerId, days);
+  const velocity = await buildVelocityStats(developerId, days);
+  const tickets = await buildTicketsStats(developerId, days);
+  const docs = await buildConfluenceStats(developerId, days);
+  const comments = await buildPRReviewCommentsStats(developerId, days);
+
+  const merged = gh.pullRequests.filter((p) => p.status === "merged");
+  const openPrs = gh.pullRequests.filter((p) => p.status === "open");
+  const inProgress = tickets.jiraTickets.filter((t) => t.statusCategory === "in_progress");
+  const todo = tickets.jiraTickets.filter((t) => t.statusCategory === "todo");
+
+  const lines: string[] = [];
+  lines.push(`# DevDash weekly summary`);
+  lines.push("");
+  lines.push(`_Lookback: last **${days}** days (generated ${new Date().toISOString().slice(0, 10)})_`);
+  lines.push("");
+  lines.push("## Highlights");
+  lines.push(`- **Velocity:** ${velocity.velocity} PRs opened (Δ ${velocity.velocityChange >= 0 ? "+" : ""}${velocity.velocityChange}% vs prior period)`);
+  lines.push(`- **Merge ratio:** ${velocity.mergeRatio}%`);
+  lines.push(`- **Review turnaround:** ${velocity.reviewTurnaroundHours > 0 ? `${velocity.reviewTurnaroundHours}h avg to first review` : "—"}`);
+  lines.push(`- **Workload health:** ${tickets.workloadHealth}/10`);
+  lines.push(`- **Tickets completed (period):** ${tickets.ticketVelocity}`);
+  lines.push(`- **PR review comments left:** ${comments.totalComments}`);
+  lines.push("");
+
+  lines.push("## Pull requests");
+  lines.push(`- Merged in period: **${merged.length}**`);
+  for (const p of merged.slice(0, 20)) {
+    lines.push(`  - [${p.title}](${p.url}) (${p.repo}#${p.number})`);
+  }
+  lines.push(`- Still open (sample): **${openPrs.length}** in list`);
+  for (const p of openPrs.slice(0, 10)) {
+    lines.push(`  - [${p.title}](${p.url})`);
+  }
+  lines.push("");
+
+  lines.push("## Work tracking");
+  lines.push(`- In progress: **${inProgress.length}**`);
+  for (const t of inProgress.slice(0, 15)) {
+    lines.push(`  - ${t.key}: ${t.title}`);
+  }
+  lines.push(`- Todo / backlog (in list): **${todo.length}**`);
+  lines.push("");
+
+  lines.push("## Documentation");
+  lines.push(`- Doc authority level: **${docs.docAuthorityLevel}**`);
+  lines.push(`- Recent pages in results: **${docs.confluenceDocs.length}**`);
+  for (const d of docs.confluenceDocs.slice(0, 8)) {
+    lines.push(`  - ${d.title} (${d.edits} edits)`);
+  }
+  lines.push("");
+
+  return lines.join("\n");
+}
+
 export function registerStatsHandlers() {
   const register = (
     channel: string,
@@ -347,4 +445,15 @@ export function registerStatsHandlers() {
   register("stats:work", buildTicketsStats);
   register("stats:confluence", buildConfluenceStats);
   register("stats:docs", buildConfluenceStats);
+
+  ipcMain.handle("stats:team-overview", async (_e, data: { days: number }) => {
+    const days = data.days ?? 30;
+    return buildTeamOverview(days);
+  });
+
+  ipcMain.handle("stats:weekly-report-markdown", async (_e, data: { developerId: string; days: number }) => {
+    const { developerId: id, days } = data;
+    if (!getStatsContext(id, days)) throw new Error("Developer not found");
+    return buildWeeklyReportMarkdown(id, days);
+  });
 }

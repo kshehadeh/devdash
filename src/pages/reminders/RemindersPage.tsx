@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Settings2, Edit2, BellOff, X, Trash2 } from "lucide-react";
+import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Settings2, Edit2, X, Trash2 } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
 import type { ReminderRecord, RemindersListResponse, ReminderStatus } from "@/lib/types";
