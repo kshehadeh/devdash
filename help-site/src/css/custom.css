@@ -1,0 +1,136 @@
+/**
+ * DevDash help site — global theme
+ * Primary brand: indigo (#818cf8 dark / #6366f1 light)
+ * Background dark: #0b0d14 surface / #13162a cards
+ */
+
+/* ── Light mode ─────────────────────────────────────────── */
+:root {
+  --ifm-color-primary: #6366f1;
+  --ifm-color-primary-dark: #4f52ee;
+  --ifm-color-primary-darker: #4346ed;
+  --ifm-color-primary-darkest: #1e22e5;
+  --ifm-color-primary-light: #7779f3;
+  --ifm-color-primary-lighter: #8385f4;
+  --ifm-color-primary-lightest: #a5a7f7;
+
+  --ifm-code-font-size: 94%;
+  --ifm-font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --ifm-heading-font-weight: 700;
+  --ifm-navbar-height: 60px;
+  --docusaurus-highlighted-code-line-bg: rgba(99, 102, 241, 0.08);
+}
+
+/* ── Dark mode ──────────────────────────────────────────── */
+[data-theme='dark'] {
+  --ifm-color-primary: #818cf8;
+  --ifm-color-primary-dark: #6b77f6;
+  --ifm-color-primary-darker: #5f6cf5;
+  --ifm-color-primary-darkest: #3341f1;
+  --ifm-color-primary-light: #97a1f9;
+  --ifm-color-primary-lighter: #a3aefa;
+  --ifm-color-primary-lightest: #c5cbfc;
+
+  /* Backgrounds */
+  --ifm-background-color: #0b0d14;
+  --ifm-background-surface-color: #13162a;
+  --ifm-navbar-background-color: #0d0f1c;
+  --ifm-footer-background-color: #080a10;
+  --ifm-card-background-color: #13162a;
+
+  /* Borders */
+  --ifm-color-emphasis-100: #1e2238;
+  --ifm-color-emphasis-200: #252844;
+  --ifm-color-emphasis-300: #2e3257;
+
+  /* Text */
+  --ifm-font-color-base: #e2e4f0;
+  --ifm-font-color-secondary: #9ba0be;
+
+  /* Code blocks */
+  --ifm-code-background: #161928;
+  --prism-background-color: #0e1121;
+  --docusaurus-highlighted-code-line-bg: rgba(129, 140, 248, 0.12);
+
+  /* TOC */
+  --ifm-toc-border-color: #1e2238;
+}
+
+/* ── Navbar ─────────────────────────────────────────────── */
+[data-theme='dark'] .navbar {
+  border-bottom: 1px solid var(--ifm-color-emphasis-100);
+  box-shadow: 0 1px 0 var(--ifm-color-emphasis-100);
+}
+
+.navbar__title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+[data-theme='dark'] .theme-doc-sidebar-container {
+  border-right-color: var(--ifm-color-emphasis-100);
+}
+
+[data-theme='dark'] .menu__link--active {
+  background: rgba(129, 140, 248, 0.12);
+}
+
+/* ── Doc page ────────────────────────────────────────────── */
+[data-theme='dark'] .theme-doc-breadcrumbs {
+  opacity: 0.6;
+}
+
+/* ── Footer ─────────────────────────────────────────────── */
+[data-theme='dark'] .footer {
+  border-top: 1px solid var(--ifm-color-emphasis-100);
+}
+
+/* ── Admonitions ─────────────────────────────────────────── */
+[data-theme='dark'] .alert--info {
+  background: rgba(129, 140, 248, 0.08);
+  border-color: rgba(129, 140, 248, 0.3);
+}
+
+[data-theme='dark'] .alert--tip {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+[data-theme='dark'] .alert--warning {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+/* ── Code blocks ─────────────────────────────────────────── */
+[data-theme='dark'] .prism-code {
+  background: var(--prism-background-color) !important;
+  border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+/* ── Tables ──────────────────────────────────────────────── */
+[data-theme='dark'] table {
+  border-color: var(--ifm-color-emphasis-200);
+}
+
+[data-theme='dark'] table tr:nth-child(2n) {
+  background: rgba(255,255,255,0.02);
+}
+
+[data-theme='dark'] table thead tr {
+  border-bottom-color: var(--ifm-color-emphasis-300);
+  background: rgba(129, 140, 248, 0.06);
+}
+
+/* ── Scrollbar (Webkit) ──────────────────────────────────── */
+[data-theme='dark'] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: var(--ifm-color-emphasis-300);
+  border-radius: 3px;
+}

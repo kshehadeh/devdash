@@ -1,0 +1,187 @@
+/* ── Hero ─────────────────────────────────────────────────── */
+.heroBanner {
+  padding: 6rem 0 5rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99, 102, 241, 0.18) 0%, transparent 70%),
+              var(--ifm-background-color);
+  border-bottom: 1px solid var(--ifm-color-emphasis-100);
+}
+
+.heroEyebrow {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary);
+  background: rgba(129, 140, 248, 0.1);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+  border-radius: 100px;
+  padding: 0.25rem 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.heroTitle {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 1.25rem;
+}
+
+.heroSubtitle {
+  font-size: 1.15rem;
+  line-height: 1.65;
+  opacity: 0.7;
+  max-width: 600px;
+  margin: 0 auto 2.5rem;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 996px) {
+  .heroBanner {
+    padding: 3rem 1.5rem;
+  }
+  .heroTitle {
+    font-size: 2rem;
+  }
+}
+
+/* ── Integrations strip ───────────────────────────────────── */
+.integrationsStrip {
+  padding: 2rem 0;
+  text-align: center;
+  border-bottom: 1px solid var(--ifm-color-emphasis-100);
+}
+
+.integrationsLabel {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.45;
+  margin-bottom: 0.75rem;
+}
+
+.integrationsBadges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.integrationBadge {
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.3rem 0.8rem;
+  border-radius: 100px;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-font-color-secondary);
+}
+
+/* ── Features section ─────────────────────────────────────── */
+.featuresSection {
+  padding: 5rem 0 4rem;
+}
+
+.sectionHeading {
+  text-align: center;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.sectionSubheading {
+  text-align: center;
+  opacity: 0.6;
+  font-size: 1rem;
+  max-width: 480px;
+  margin: 0 auto 3rem;
+}
+
+.featuresGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 1.25rem;
+}
+
+.featureCard {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-font-color-base);
+  text-decoration: none !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.featureCard:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.2), 0 8px 24px rgba(0,0,0,0.25);
+  transform: translateY(-2px);
+  color: var(--ifm-font-color-base);
+  text-decoration: none;
+}
+
+.featureIcon {
+  font-size: 1.6rem;
+  margin-bottom: 0.75rem;
+  line-height: 1;
+}
+
+.featureTitle {
+  font-size: 1rem !important;
+  font-weight: 600;
+  margin-bottom: 0.5rem !important;
+}
+
+.featureDescription {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  opacity: 0.7;
+  flex: 1;
+  margin-bottom: 1rem;
+}
+
+.featureLink {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+  margin-top: auto;
+}
+
+/* ── CTA ──────────────────────────────────────────────────── */
+.ctaSection {
+  padding: 5rem 0;
+  text-align: center;
+  background: radial-gradient(ellipse 60% 80% at 50% 100%, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+  border-top: 1px solid var(--ifm-color-emphasis-100);
+}
+
+.ctaTitle {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+}
+
+.ctaSubtitle {
+  opacity: 0.65;
+  font-size: 1rem;
+  max-width: 480px;
+  margin: 0 auto 2rem;
+  line-height: 1.65;
+}
