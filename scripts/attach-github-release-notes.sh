@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Fill a GitHub release body with commits since the last *published* (non-draft) release,
 # using the Compare API. No PR / generate-notes API.
+# After updating notes, clears draft status so the release is published (electron-builder
+# typically leaves GitHub releases as drafts until this step).
 #
 # Usage:
 #   ./scripts/attach-github-release-notes.sh [TAG]
@@ -76,5 +78,5 @@ fi
 
 printf '%s\n' "${BODY}" > "${NOTES_FILE}"
 
-gh release edit "${TAG}" --notes-file "${NOTES_FILE}"
-echo "Updated release notes for ${TAG} (wrote ${NOTES_FILE})."
+gh release edit "${TAG}" --notes-file "${NOTES_FILE}" --draft=false
+echo "Updated and published release ${TAG} (wrote ${NOTES_FILE})."

@@ -41,8 +41,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bun run electron:build:publish
 
-      # electron-builder creates the draft release without a body; fill it from commits since the last published release.
-      - name: Add release notes (commits since last published release)
+      # electron-builder creates the draft release without a body; fill it from commits since the last published release, then publish.
+      - name: Add release notes and publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/attach-github-release-notes.sh
