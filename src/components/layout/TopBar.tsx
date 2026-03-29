@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ChevronDown, Check, Plus, Pencil } from "lucide-react";
+import { ChevronDown, Check, Plus, Pencil, Users } from "lucide-react";
 import { clsx } from "clsx";
 import { FullWindowModal } from "@/components/ui/FullWindowModal";
 import { DeveloperForm } from "@/components/dashboard/DeveloperForm";
+import { BulkDevelopersForm } from "@/components/dashboard/BulkDevelopersForm";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { invoke } from "@/lib/api";
 import type { Developer } from "@/lib/types";
@@ -18,6 +19,7 @@ interface TopBarProps {
 export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, title }: TopBarProps) {
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [bulkAddOpen, setBulkAddOpen] = useState(false);
   const [editDev, setEditDev] = useState<Developer | null>(null);
 
   const selected = developers.find((d) => d.id === selectedId);
@@ -46,6 +48,14 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
     // Select first remaining developer
     const remaining = developers.filter((d) => d.id !== editDev.id);
     if (remaining.length > 0) onSelect(remaining[0].id);
+  }
+
+  async function handleBulkComplete({ createdIds, closed }: { createdIds: string[]; closed: boolean }) {
+    if (createdIds.length > 0) {
+      await Promise.resolve(onDevelopersChange());
+      onSelect(createdIds[createdIds.length - 1]!);
+    }
+    if (closed) setBulkAddOpen(false);
   }
 
   return (
@@ -121,13 +131,20 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
                   </div>
                 ))}
 
-                <div className="border-t border-[var(--outline-variant)]/20 p-2">
+                <div className="border-t border-[var(--outline-variant)]/20 p-2 flex flex-col gap-0.5">
                   <button
                     onClick={() => { setOpen(false); setAddOpen(true); }}
                     className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-[var(--surface-bright)] transition-colors text-[var(--primary)] text-sm font-medium"
                   >
                     <Plus size={14} />
                     Add Developer
+                  </button>
+                  <button
+                    onClick={() => { setOpen(false); setBulkAddOpen(true); }}
+                    className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-[var(--surface-bright)] transition-colors text-[var(--primary)] text-sm font-medium"
+                  >
+                    <Users size={14} />
+                    Add multiple…
                   </button>
                 </div>
               </div>
@@ -142,6 +159,15 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
           onCancel={() => setAddOpen(false)}
           submitLabel="Add Developer"
         />
+      </FullWindowModal>
+
+      <FullWindowModal
+        open={bulkAddOpen}
+        onClose={() => setBulkAddOpen(false)}
+        title="Add multiple developers"
+        description="Fill one row per developer, assign data sources as needed, then add them all at once."
+      >
+        <BulkDevelopersForm onCancel={() => setBulkAddOpen(false)} onComplete={handleBulkComplete} />
       </FullWindowModal>
 
       <FullWindowModal open={!!editDev} onClose={() => setEditDev(null)} title="Edit Developer">

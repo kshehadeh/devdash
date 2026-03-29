@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Github, Kanban, BookOpen, ListTree } from "lucide-react";
 import { invoke } from "@/lib/api";
 import { DEVELOPER_SOURCES_CHANGED_EVENT } from "@/lib/app-events";
-import type { Developer, DataSource, DataSourceType } from "@/lib/types";
+import { DataSourcesChecklist } from "@/components/dashboard/DataSourcesChecklist";
+import type { Developer, DataSource } from "@/lib/types";
 
 interface FormValues {
   name: string;
@@ -24,13 +24,6 @@ interface DeveloperFormProps {
   /** Called after submit and source assignment succeed. */
   onSuccess?: () => void | Promise<void>;
 }
-
-const SOURCE_ICONS: Record<DataSourceType, typeof Github> = {
-  github_repo: Github,
-  jira_project: Kanban,
-  confluence_space: BookOpen,
-  linear_team: ListTree,
-};
 
 function InputField({
   label,
@@ -215,13 +208,18 @@ export function DeveloperForm({
               onChange={set("githubUsername")}
               placeholder="alexchen"
             />
-            <InputField
-              label="Atlassian Email"
-              value={values.atlassianEmail}
-              onChange={set("atlassianEmail")}
-              type="email"
-              placeholder="alex.chen@underarmour.com"
-            />
+            <div>
+              <InputField
+                label="Work email (Jira & Linear assignee)"
+                value={values.atlassianEmail}
+                onChange={set("atlassianEmail")}
+                type="email"
+                placeholder="alex.chen@company.com"
+              />
+              <p className="mt-1 text-xs text-[var(--on-surface-variant)]">
+                Also used for Confluence identity when connected.
+              </p>
+            </div>
           </div>
 
           {sourcesLoaded && allSources.length > 0 && (initial || assignSourcesForNew) && (
@@ -229,32 +227,7 @@ export function DeveloperForm({
               <p className="text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-2">
                 Assigned Data Sources
               </p>
-              <div className="flex flex-col gap-1">
-                {allSources.map((source) => {
-                  const Icon = SOURCE_ICONS[source.type];
-                  const checked = assignedIds.has(source.id);
-                  return (
-                    <label
-                      key={source.id}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSource(source.id)}
-                        className="accent-[var(--primary)] w-3.5 h-3.5"
-                      />
-                      <Icon size={13} className="text-[var(--on-surface-variant)] shrink-0" />
-                      <span className="text-sm text-[var(--on-surface)] flex-1 truncate">{source.name}</span>
-                      <span className="text-[10px] text-[var(--on-surface-variant)] font-label">
-                        {source.type === "github_repo"
-                          ? `${source.org}/${source.identifier}`
-                          : source.identifier}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+              <DataSourcesChecklist sources={allSources} selectedIds={assignedIds} onToggle={toggleSource} />
             </div>
           )}
 
