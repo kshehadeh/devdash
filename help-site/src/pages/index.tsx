@@ -3,6 +3,7 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
+import {DownloadButton} from '../components/DownloadButton';
 import styles from './index.module.css';
 
 function HeroSection() {
@@ -21,11 +22,7 @@ function HeroSection() {
           <Link className="button button--primary button--lg" to="/docs/intro">
             Get started →
           </Link>
-          <Link
-            className="button button--secondary button--lg"
-            href="https://github.com/kshehadeh/devdash/releases">
-            Download for macOS
-          </Link>
+          <DownloadButton />
         </div>
       </div>
     </header>
@@ -168,11 +165,7 @@ export default function Home(): ReactNode {
               <Link className="button button--primary button--lg" to="/docs/intro">
                 Read the setup guide
               </Link>
-              <Link
-                className="button button--secondary button--lg"
-                href="https://github.com/kshehadeh/devdash/releases">
-                Download latest release
-              </Link>
+              <DownloadButton />
             </div>
           </div>
         </section>

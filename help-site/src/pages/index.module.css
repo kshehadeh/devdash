@@ -45,6 +45,7 @@
   justify-content: center;
   gap: 1rem;
   flex-wrap: wrap;
+  padding-bottom: 1.75rem;
 }
 
 @media (max-width: 996px) {
@@ -184,4 +185,28 @@
   max-width: 480px;
   margin: 0 auto 2rem;
   line-height: 1.65;
+}
+
+/* ── Download Button Wrapper ──────────────────────────────── */
+.downloadButtonWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.downloadAltLink {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: var(--ifm-color-primary);
+  opacity: 0.7;
+  text-decoration: none;
+}
+
+.downloadAltLink:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
