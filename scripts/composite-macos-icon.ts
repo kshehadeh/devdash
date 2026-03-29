@@ -34,4 +34,10 @@ await sharp({
   .toFile(outPath);
 
 copyFileSync(srcIcon, buildIconPng);
-console.log(`Wrote ${outPath} and synced ${buildIconPng}`);
+
+const helpImgDir = path.join(root, "help-site", "static", "img");
+const faviconPath = path.join(helpImgDir, "favicon.png");
+mkdirSync(helpImgDir, { recursive: true });
+await sharp(outPath).resize(128, 128).png().toFile(faviconPath);
+
+console.log(`Wrote ${outPath}, ${buildIconPng}, ${faviconPath}`);
