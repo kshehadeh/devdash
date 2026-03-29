@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Loader2, RefreshCw, SlidersHorizontal, LayoutGrid } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { invoke } from "@/lib/api";
 import { useUpdate } from "@/context/UpdateContext";
@@ -19,6 +19,9 @@ export default function General() {
   const [macOSLoading, setMacOSLoading] = useState(true);
   const [syncingNow, setSyncingNow] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [trayEnabled, setTrayEnabled] = useState(true);
+  const [trayLoading, setTrayLoading] = useState(true);
+  const [trayBusy, setTrayBusy] = useState(false);
 
   const loadPref = useCallback(async () => {
     try {
@@ -43,10 +46,22 @@ export default function General() {
     }
   }, []);
 
+  const loadTrayPref = useCallback(async () => {
+    try {
+      const v = await invoke<string | null>("app-config:get", { key: "tray_enabled" });
+      setTrayEnabled(v !== "0");
+    } catch {
+      setTrayEnabled(true);
+    } finally {
+      setTrayLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadPref();
     void loadMacOSConfig();
-  }, [loadPref, loadMacOSConfig]);
+    void loadTrayPref();
+  }, [loadPref, loadMacOSConfig, loadTrayPref]);
 
   const onToggleAutoUpdate = async (checked: boolean) => {
     setToggleBusy(true);
@@ -94,6 +109,19 @@ export default function General() {
       await invoke("reminders:config:set", { syncToMacOS: checked });
     } catch {
       setSyncToMacOS(prev);
+    }
+  };
+
+  const onToggleTray = async (checked: boolean) => {
+    setTrayBusy(true);
+    const prev = trayEnabled;
+    setTrayEnabled(checked);
+    try {
+      await invoke("tray:toggle", { enabled: checked });
+    } catch {
+      setTrayEnabled(prev);
+    } finally {
+      setTrayBusy(false);
     }
   };
 
@@ -155,7 +183,35 @@ export default function General() {
           )}
         </Card>
 
-        {macOSAvailable && !macOSLoading && (
+        {!trayLoading && (
+        <Card>
+          <div className="flex items-center gap-2 min-w-0 mb-3">
+            <LayoutGrid size={18} className="text-[var(--on-surface)] shrink-0" />
+            <h3 className="text-base font-semibold text-[var(--on-surface)]">Menu bar icon</h3>
+          </div>
+          <p className="text-xs font-label text-[var(--on-surface-variant)] mb-4">
+            Show a DevDash icon in the menu bar. Clicking it opens a compact view of your open pull
+            requests and tickets.
+          </p>
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="mt-0.5 rounded border-[var(--outline-variant)]"
+              checked={trayEnabled}
+              disabled={trayBusy}
+              onChange={(e) => void onToggleTray(e.target.checked)}
+            />
+            <span className="text-sm text-[var(--on-surface)]">
+              Enable menu bar icon
+              <span className="block text-xs font-label text-[var(--on-surface-variant)] mt-0.5">
+                On by default. When the main window is closed, the app stays running in the menu bar.
+              </span>
+            </span>
+          </label>
+        </Card>
+      )}
+
+      {macOSAvailable && !macOSLoading && (
           <Card>
             <div className="flex items-center gap-2 min-w-0 mb-3">
               <SlidersHorizontal size={18} className="text-[var(--on-surface)] shrink-0" />

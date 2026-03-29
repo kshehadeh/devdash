@@ -8,6 +8,8 @@ import { runExportSettings, runImportSettings } from "./ipc/settings-io";
 import { initAutoUpdate } from "./updater-service";
 import { startNotificationScheduler } from "./notifications/scheduler";
 import { startReminderScheduler } from "./reminders/scheduler";
+import { initTray, isTrayActive } from "./tray";
+import { getConfig } from "./db/config";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -486,11 +488,19 @@ app.whenReady().then(() => {
   startReminderScheduler(() => mainWindow);
   initAutoUpdate(() => mainWindow, isDev);
 
+  const trayEnabled = getConfig("tray_enabled");
+  if (trayEnabled !== "0") {
+    initTray(() => mainWindow);
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("window-all-closed", () => {
+  // On macOS, keep the app running if the tray icon is active so the user
+  // can still access the tray popover after closing the main window.
+  if (process.platform === "darwin" && isTrayActive()) return;
   if (process.platform !== "darwin") app.quit();
 });

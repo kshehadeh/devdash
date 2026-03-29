@@ -19,6 +19,7 @@ import RemindersPage from "./pages/reminders/RemindersPage";
 import MyDayPage from "./pages/MyDay";
 import TeamPage from "./pages/Team";
 import Onboarding from "./pages/Onboarding";
+import TrayPopover from "./pages/TrayPopover";
 import { invoke, type ContextMenuAction } from "./lib/api";
 import { formatReminderTitle } from "./lib/reminder-context";
 import { useSelectedDeveloper } from "./context/SelectedDeveloperContext";
@@ -143,6 +144,11 @@ function RoutedApp() {
 }
 
 export default function App() {
+  // Tray popover window uses a separate preload that exposes window.trayShell instead of window.electron
+  if (typeof window !== "undefined" && "trayShell" in window) {
+    return <TrayPopover />;
+  }
+
   return (
     <AppStatusProvider>
       <UpdateProvider>

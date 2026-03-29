@@ -15,6 +15,7 @@ import { registerReminderHandlers } from "./reminders";
 import { registerDevToolsHandlers } from "./dev-tools";
 import { registerContextMenuHandlers } from "./context-menu";
 import { registerSearchHandlers } from "./search";
+import { registerTrayHandlers } from "./tray";
 import type { BrowserWindow } from "electron";
 
 export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
@@ -35,4 +36,5 @@ export function registerAllHandlers(getWindow: () => BrowserWindow | null) {
   registerReviewsHandlers();
   registerSettingsIOHandlers(getWindow);
   registerDevToolsHandlers(getWindow);
+  registerTrayHandlers(getWindow);
 }

@@ -12,6 +12,8 @@ const ALLOWED_KEYS = new Set([
   "pr_stale_danger_days",
   /** JSON string: ordered dashboard widget ids for layout customization */
   "dashboard_widget_layout_json",
+  /** "0" to disable the menu bar tray icon; anything else (or absent) means enabled */
+  "tray_enabled",
 ]);
 
 export function registerAppConfigHandlers() {
