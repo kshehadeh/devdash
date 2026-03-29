@@ -308,9 +308,29 @@ function setupProtocol() {
 }
 
 function createWindow() {
+  const isMac = process.platform === "darwin";
+  const isWin = process.platform === "win32";
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    backgroundColor: "#131b2e",
+    ...(isMac
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+          // Slightly lower than Electron default — closer to native toolbar vertical inset (h-14 title row)
+          trafficLightPosition: { x: 12, y: 19 },
+        }
+      : {}),
+    ...(isWin
+      ? {
+          titleBarOverlay: {
+            color: "#131b2e",
+            symbolColor: "#c1c6d7",
+            height: 56,
+          },
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

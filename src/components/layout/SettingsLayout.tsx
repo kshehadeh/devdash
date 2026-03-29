@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { SlidersHorizontal, Terminal, Database, HardDrive, Bell, Wrench } from "lucide-react";
 import { clsx } from "clsx";
-import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { AppWindowHeader } from "@/components/layout/AppWindowHeader";
 
 const settingsNav = [
   { href: "/settings/general", icon: SlidersHorizontal, label: "General", description: "App preferences" },
@@ -17,12 +17,13 @@ export default function SettingsLayout() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-center justify-between px-6 h-14 bg-[var(--surface-container-low)] shrink-0">
-        <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
-          Settings
-        </h1>
-        <NotificationCenter />
-      </header>
+      <AppWindowHeader
+        start={
+          <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
+            Settings
+          </h1>
+        }
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Settings sidebar */}

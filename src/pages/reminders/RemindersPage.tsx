@@ -8,6 +8,7 @@ import { invoke } from "@/lib/api";
 import type { ReminderRecord, RemindersListResponse, ReminderStatus } from "@/lib/types";
 import { ReminderDialog } from "@/components/reminders/ReminderDialog";
 import { SnoozePopover } from "@/components/reminders/SnoozePopover";
+import { AppWindowHeader, AppWindowHeaderNoDrag } from "@/components/layout/AppWindowHeader";
 
 type FilterStatus = "all" | ReminderStatus;
 
@@ -196,48 +197,54 @@ export default function RemindersPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-center justify-between px-6 h-14 bg-[var(--surface-container-low)] shrink-0">
-        <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
-          Reminders
-        </h1>
-        <div className="flex items-center gap-3">
-          {macOSAvailable && (
-            <div className="relative">
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md hover:bg-[var(--surface-container)] text-xs font-label text-[var(--on-surface-variant)] transition-colors"
-              >
-                <Settings2 size={14} />
-              </button>
-              {showSettings && (
-                <div className="absolute right-0 top-full mt-1 w-64 bg-[var(--surface-container-highest)] rounded-md shadow-lg border border-[var(--outline-variant)]/30 z-50 p-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={syncToMacOS}
-                      onChange={() => void handleToggleMacOSSync()}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-xs text-[var(--on-surface)]">
-                      Sync to macOS Reminders
-                    </span>
-                  </label>
-                  <p className="text-[10px] text-[var(--on-surface-variant)] mt-2">
-                    When enabled, triggered reminders will also be created in the macOS Reminders app.
-                  </p>
+      <AppWindowHeader
+        start={
+          <>
+            <h1 className="shrink-0 text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
+              Reminders
+            </h1>
+            <AppWindowHeaderNoDrag className="ml-auto flex-wrap justify-end sm:ml-3">
+              {macOSAvailable && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md hover:bg-[var(--surface-container)] text-xs font-label text-[var(--on-surface-variant)] transition-colors"
+                  >
+                    <Settings2 size={14} />
+                  </button>
+                  {showSettings && (
+                    <div className="absolute right-0 top-full mt-1 w-64 bg-[var(--surface-container-highest)] rounded-md shadow-lg border border-[var(--outline-variant)]/30 z-50 p-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={syncToMacOS}
+                          onChange={() => void handleToggleMacOSSync()}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-xs text-[var(--on-surface)]">
+                          Sync to macOS Reminders
+                        </span>
+                      </label>
+                      <p className="text-[10px] text-[var(--on-surface-variant)] mt-2">
+                        When enabled, triggered reminders will also be created in the macOS Reminders app.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
-          <button
-            onClick={openCreateDialog}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary)]/90 text-xs font-label transition-colors"
-          >
-            <Plus size={14} />
-            New Reminder
-          </button>
-        </div>
-      </header>
+              <button
+                type="button"
+                onClick={openCreateDialog}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary)]/90 text-xs font-label transition-colors"
+              >
+                <Plus size={14} />
+                New Reminder
+              </button>
+            </AppWindowHeaderNoDrag>
+          </>
+        }
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}

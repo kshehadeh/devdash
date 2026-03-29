@@ -23,18 +23,26 @@ import TrayPopover from "./pages/TrayPopover";
 import { invoke, type ContextMenuAction } from "./lib/api";
 import { formatReminderTitle } from "./lib/reminder-context";
 import { useSelectedDeveloper } from "./context/SelectedDeveloperContext";
-import { CommandPalette } from "./components/CommandPalette";
+import { CommandPaletteStateProvider, useCommandPaletteControls } from "./context/CommandPaletteContext";
 
 function MainLayoutInner() {
   const { selectedDevId } = useSelectedDeveloper();
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  return (
+    <CommandPaletteStateProvider developerId={selectedDevId || null}>
+      <MainLayoutShell />
+    </CommandPaletteStateProvider>
+  );
+}
+
+function MainLayoutShell() {
+  const { toggleCommandPalette } = useCommandPaletteControls();
 
   useEffect(() => {
     const cleanup = window.electron.onOpenCommandPalette(() => {
-      setPaletteOpen((o) => !o);
+      toggleCommandPalette();
     });
     return cleanup;
-  }, []);
+  }, [toggleCommandPalette]);
 
   useEffect(() => {
     const cleanup = window.electron.onContextMenuAction((payload: ContextMenuAction) => {
@@ -55,16 +63,11 @@ function MainLayoutInner() {
 
   return (
     <div className="flex h-full w-full min-h-0 flex-1">
-      <Sidebar onOpenCommandPalette={() => setPaletteOpen(true)} />
+      <Sidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-12">
         <Outlet />
         <StatusBar />
       </div>
-      <CommandPalette
-        developerId={selectedDevId || null}
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   notificationReminderMenuContext,
   notificationSourceGroupReminderMenuContext,
 } from "@/lib/reminder-context";
+import { AppWindowHeader, AppWindowHeaderNoDrag } from "@/components/layout/AppWindowHeader";
 import type { NotificationGroup, NotificationRecord, NotificationSourceGroup, NotificationsGroupedResponse } from "@/lib/types";
 
 function formatWhen(iso: string): string {
@@ -219,29 +220,35 @@ export default function NotificationsPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-center justify-between px-6 h-14 bg-[var(--surface-container-low)] shrink-0">
-        <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
-          Notifications
-        </h1>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => void checkNow()}
-            disabled={checking}
-            className="flex items-center gap-1.5 text-xs font-label text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] disabled:opacity-50 transition-colors"
-            title="Check for new notifications now"
-          >
-            <RefreshCw size={13} className={checking ? "animate-spin" : ""} />
-            {checking ? "Checking..." : "Check now"}
-          </button>
-          <button
-            onClick={() => void markAllRead()}
-            disabled={totalUnreadCount === 0}
-            className="text-xs font-label text-[var(--primary)] disabled:text-[var(--on-surface-variant)]/50"
-          >
-            Mark all read
-          </button>
-        </div>
-      </header>
+      <AppWindowHeader
+        start={
+          <>
+            <h1 className="shrink-0 text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
+              Notifications
+            </h1>
+            <AppWindowHeaderNoDrag className="ml-auto sm:ml-3">
+              <button
+                type="button"
+                onClick={() => void checkNow()}
+                disabled={checking}
+                className="flex items-center gap-1.5 text-xs font-label text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] disabled:opacity-50 transition-colors"
+                title="Check for new notifications now"
+              >
+                <RefreshCw size={13} className={checking ? "animate-spin" : ""} />
+                {checking ? "Checking..." : "Check now"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void markAllRead()}
+                disabled={totalUnreadCount === 0}
+                className="text-xs font-label text-[var(--primary)] disabled:text-[var(--on-surface-variant)]/50"
+              >
+                Mark all read
+              </button>
+            </AppWindowHeaderNoDrag>
+          </>
+        }
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}

@@ -4,7 +4,7 @@ import { clsx } from "clsx";
 import { FullWindowModal } from "@/components/ui/FullWindowModal";
 import { DeveloperForm } from "@/components/dashboard/DeveloperForm";
 import { BulkDevelopersForm } from "@/components/dashboard/BulkDevelopersForm";
-import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { AppWindowHeader } from "@/components/layout/AppWindowHeader";
 import { invoke } from "@/lib/api";
 import type { Developer } from "@/lib/types";
 
@@ -60,15 +60,16 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
 
   return (
     <>
-      <header className="flex items-center justify-between px-6 h-14 bg-[var(--surface-container-low)] shrink-0 relative z-20">
-        <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
-          {title ?? "Developer Performance"}
-        </h1>
-
-        <div className="flex items-center gap-2">
-          <NotificationCenter />
-          <div className="relative">
+      <AppWindowHeader
+        start={
+          <h1 className="text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
+            {title ?? "Developer Performance"}
+          </h1>
+        }
+        end={
+          <div className="relative ml-1">
             <button
+              type="button"
               onClick={() => setOpen((v) => !v)}
               className="flex items-center gap-2.5 px-3 py-1.5 rounded-md bg-[var(--surface-container)] hover:bg-[var(--surface-container-high)] transition-colors"
             >
@@ -150,8 +151,8 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
               </div>
             )}
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <FullWindowModal open={addOpen} onClose={() => setAddOpen(false)} title="Add Developer">
         <DeveloperForm
