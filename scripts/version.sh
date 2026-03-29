@@ -21,12 +21,42 @@ VERSION="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${VERSION}"
 
 PREV_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+
 if [[ -n "$PREV_TAG" ]]; then
-  echo ""
+  COMMIT_COUNT="$(git rev-list --count "${PREV_TAG}..HEAD" 2>/dev/null || echo 0)"
+  if [[ "${COMMIT_COUNT}" -eq 0 ]]; then
+    echo "Error: No commits since the last release (${PREV_TAG}). Nothing to release." >&2
+    exit 1
+  fi
+fi
+
+echo ""
+echo "Planned release: ${TAG}"
+echo ""
+
+if [[ -n "$PREV_TAG" ]]; then
   echo "Commits since ${PREV_TAG} (will be included in GitHub release notes):"
-  git log --no-merges --pretty=format:'  - %s (%h)' "${PREV_TAG}..HEAD" || true
+  git --no-pager log --no-merges --pretty=format:'  - %s (%h)' "${PREV_TAG}..HEAD" || true
+  echo ""
+else
+  echo "No previous tag found; this may be the first release."
   echo ""
 fi
+
+if [[ -t 0 ]]; then
+  read -r -p 'Continue releasing these changes? [y/N] ' reply
+  case "${reply}" in
+    [yY]|[yY][eE][sS]) ;;
+    *)
+      echo "Aborted."
+      exit 1
+      ;;
+  esac
+else
+  echo "Non-interactive shell: continuing without confirmation."
+fi
+
+echo ""
 
 # Write new version directly into package.json
 node -e "
