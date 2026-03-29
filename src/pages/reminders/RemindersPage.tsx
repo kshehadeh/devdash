@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Settings2, Edit2, X, Trash2 } from "lucide-react";
+import { AlarmClock, Plus, ExternalLink, Clock, MessageSquare, Edit2, X, Trash2 } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
 import type { ReminderRecord, RemindersListResponse, ReminderStatus } from "@/lib/types";
 import { ReminderDialog } from "@/components/reminders/ReminderDialog";
 import { SnoozePopover } from "@/components/reminders/SnoozePopover";
-import { AppWindowHeader, AppWindowHeaderNoDrag } from "@/components/layout/AppWindowHeader";
+import { AppWindowHeader } from "@/components/layout/AppWindowHeader";
 
 type FilterStatus = "all" | ReminderStatus;
 
@@ -52,9 +52,6 @@ export default function RemindersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<ReminderRecord | null>(null);
   const [snoozeReminderId, setSnoozeReminderId] = useState<string | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [syncToMacOS, setSyncToMacOS] = useState(false);
-  const [macOSAvailable, setMacOSAvailable] = useState(false);
 
   const statusParam = searchParams.get("status") as ReminderStatus | null;
 
@@ -93,20 +90,18 @@ export default function RemindersPage() {
     }
   }, []);
 
-  const loadConfig = useCallback(async () => {
-    try {
-      const res = await invoke<{ syncToMacOS: boolean; macOSAvailable: boolean }>("reminders:config:get");
-      setSyncToMacOS(res.syncToMacOS);
-      setMacOSAvailable(res.macOSAvailable);
-    } catch {
-      // Ignore
-    }
-  }, []);
-
   useEffect(() => {
     void load();
-    void loadConfig();
-  }, [load, loadConfig]);
+  }, [load]);
+
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setEditingReminder(null);
+    setDialogOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (statusParam && ["pending", "triggered", "snoozed", "dismissed"].includes(statusParam)) {
@@ -159,19 +154,6 @@ export default function RemindersPage() {
     void load();
   }
 
-  async function handleToggleMacOSSync() {
-    const newValue = !syncToMacOS;
-    try {
-      await invoke("reminders:config:set", { syncToMacOS: newValue });
-      setSyncToMacOS(newValue);
-      // Reload config to get updated macOS availability after permission check
-      await loadConfig();
-    } catch (err) {
-      // Revert UI state if permission was denied or error occurred
-      alert(`Failed to ${newValue ? "enable" : "disable"} macOS sync: ${err instanceof Error ? err.message : "Unknown error"}`);
-    }
-  }
-
   // Filter reminders on the frontend
   const filteredReminders = (() => {
     if (filter === "all") {
@@ -199,50 +181,9 @@ export default function RemindersPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <AppWindowHeader
         start={
-          <>
-            <h1 className="shrink-0 text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
-              Reminders
-            </h1>
-            <AppWindowHeaderNoDrag className="ml-auto flex-wrap justify-end sm:ml-3">
-              {macOSAvailable && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md hover:bg-[var(--surface-container)] text-xs font-label text-[var(--on-surface-variant)] transition-colors"
-                  >
-                    <Settings2 size={14} />
-                  </button>
-                  {showSettings && (
-                    <div className="absolute right-0 top-full mt-1 w-64 bg-[var(--surface-container-highest)] rounded-md shadow-lg border border-[var(--outline-variant)]/30 z-50 p-3">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={syncToMacOS}
-                          onChange={() => void handleToggleMacOSSync()}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-xs text-[var(--on-surface)]">
-                          Sync to macOS Reminders
-                        </span>
-                      </label>
-                      <p className="text-[10px] text-[var(--on-surface-variant)] mt-2">
-                        When enabled, triggered reminders will also be created in the macOS Reminders app.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={openCreateDialog}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary)]/90 text-xs font-label transition-colors"
-              >
-                <Plus size={14} />
-                New Reminder
-              </button>
-            </AppWindowHeaderNoDrag>
-          </>
+          <h1 className="shrink-0 text-sm font-semibold text-[var(--on-surface-variant)] font-label tracking-widest uppercase">
+            Reminders
+          </h1>
         }
       />
 
@@ -303,11 +244,22 @@ export default function RemindersPage() {
         </nav>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
+        <div className="flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
+          <div className="flex shrink-0 justify-end border-b border-[var(--outline-variant)]/15 px-6 py-3">
+            <button
+              type="button"
+              onClick={openCreateDialog}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary)]/90 text-xs font-label transition-colors"
+            >
+              <Plus size={14} />
+              New Reminder
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
             <p className="px-6 py-4 text-xs text-[var(--on-surface-variant)]">Loading...</p>
           ) : filteredReminders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-[var(--on-surface-variant)]">
+            <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 px-6 py-8 text-[var(--on-surface-variant)]">
               <AlarmClock size={32} className="opacity-30" />
               <p className="text-sm">
                 {filter === "all" ? "No reminders yet." : `No ${filter} reminders.`}
@@ -432,6 +384,7 @@ export default function RemindersPage() {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
 

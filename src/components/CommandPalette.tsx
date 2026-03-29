@@ -1,11 +1,47 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
 import type { GlobalSearchResult } from "@/lib/types";
+
+type PaletteRow =
+  | { type: "action"; id: "create-reminder"; title: string; subtitle: string }
+  | { type: "result"; result: GlobalSearchResult };
+
+const CREATE_REMINDER_TITLE = "Create reminder";
+const CREATE_REMINDER_SUBTITLE = "Open Reminders and start a new timed reminder";
+
+/** True when the query should surface the Create reminder action (hidden when empty). */
+function createReminderActionMatchesQuery(raw: string): boolean {
+  const q = raw.trim().toLowerCase();
+  if (!q) return false;
+
+  const haystack = `${CREATE_REMINDER_TITLE} ${CREATE_REMINDER_SUBTITLE}`.toLowerCase();
+  if (haystack.includes(q)) return true;
+
+  const tokens = [
+    "create",
+    "reminder",
+    "reminders",
+    "new",
+    "add",
+    "open",
+    "start",
+    "timed",
+    "alarm",
+    "snooze",
+    "due",
+    "later",
+    "notify",
+  ];
+  if (tokens.some((t) => t.startsWith(q) || q.startsWith(t))) return true;
+  if (q.length >= 2 && tokens.some((t) => t.includes(q))) return true;
+
+  return false;
+}
 
 export function CommandPalette({
   developerId,
@@ -22,8 +58,27 @@ export function CommandPalette({
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const canSearch = Boolean(developerId && query.trim().length >= 2);
+
+  const rows = useMemo((): PaletteRow[] => {
+    const list: PaletteRow[] = [];
+    if (createReminderActionMatchesQuery(query)) {
+      list.push({
+        type: "action",
+        id: "create-reminder",
+        title: CREATE_REMINDER_TITLE,
+        subtitle: CREATE_REMINDER_SUBTITLE,
+      });
+    }
+    if (canSearch) {
+      for (const r of results) {
+        list.push({ type: "result", result: r });
+      }
+    }
+    return list;
+  }, [query, canSearch, results]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -66,34 +121,54 @@ export function CommandPalette({
 
   useEffect(() => {
     setHighlight(0);
-  }, [results]);
+  }, [query, results, open]);
 
-  const select = useCallback(
-    (r: GlobalSearchResult) => {
-      if (r.navigatePath) navigate(r.navigatePath);
-      if (r.openUrl) window.open(r.openUrl, "_blank", "noopener,noreferrer");
-      onOpenChange(false);
+  const runCreateReminder = useCallback(() => {
+    if (location.pathname === "/reminders") {
+      const p = new URLSearchParams(location.search);
+      p.set("new", "1");
+      navigate(`/reminders?${p.toString()}`);
+    } else {
+      navigate("/reminders?new=1");
+    }
+    onOpenChange(false);
+  }, [location.pathname, location.search, navigate, onOpenChange]);
+
+  const selectRow = useCallback(
+    (row: PaletteRow) => {
+      if (row.type === "action" && row.id === "create-reminder") {
+        runCreateReminder();
+        return;
+      }
+      if (row.type === "result") {
+        const r = row.result;
+        if (r.navigatePath) navigate(r.navigatePath);
+        if (r.openUrl) window.open(r.openUrl, "_blank", "noopener,noreferrer");
+        onOpenChange(false);
+      }
     },
-    [navigate, onOpenChange],
+    [navigate, onOpenChange, runCreateReminder],
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlight((h) => Math.min(h + 1, Math.max(results.length - 1, 0)));
+      setHighlight((h) => Math.min(h + 1, Math.max(rows.length - 1, 0)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setHighlight((h) => Math.max(h - 1, 0));
-    } else if (e.key === "Enter" && results[highlight]) {
+    } else if (e.key === "Enter" && rows[highlight]) {
       e.preventDefault();
-      select(results[highlight]);
+      selectRow(rows[highlight]);
     }
   };
 
-  const hint = useMemo(
-    () => (developerId ? "Type 2+ characters · ↑↓ · Enter" : "Select a developer on the dashboard first"),
-    [developerId],
-  );
+  const hint = useMemo(() => {
+    if (!developerId) {
+      return "Type to find actions (e.g. create reminder) · Select a developer on the dashboard to search";
+    }
+    return "↑↓ · Enter · Type to match actions or 2+ characters to search";
+  }, [developerId]);
 
   if (!open) return null;
 
@@ -123,26 +198,48 @@ export function CommandPalette({
         </div>
         <p className="px-3 py-1 text-[10px] font-label text-[var(--on-surface-variant)]">{hint}</p>
         <div className="max-h-72 overflow-y-auto">
-          {loading && <p className="px-3 py-4 text-xs text-[var(--on-surface-variant)]">Searching…</p>}
-          {!loading && canSearch && results.length === 0 && query.trim().length >= 2 && (
-            <p className="px-3 py-4 text-xs text-[var(--on-surface-variant)]">No results</p>
+          {!loading && rows.length === 0 && query.trim().length > 0 && (
+            <p className="px-3 py-4 text-xs text-[var(--on-surface-variant)]">No matching actions or results</p>
           )}
-          {results.map((r, i) => (
-            <button
-              key={`${r.kind}-${r.id}`}
-              type="button"
-              onClick={() => select(r)}
-              className={clsx(
-                "w-full text-left px-3 py-2 border-b border-[var(--outline-variant)]/10 flex flex-col gap-0.5",
-                i === highlight ? "bg-[var(--primary)]/15" : "hover:bg-[var(--surface-container)]",
-              )}
-            >
-              <span className="text-xs font-medium text-[var(--on-surface)] truncate">{r.title}</span>
-              <span className="text-[10px] text-[var(--on-surface-variant)]">
-                {r.kind} · {r.subtitle}
-              </span>
-            </button>
-          ))}
+          {!loading && rows.length === 0 && query.trim().length === 0 && (
+            <p className="px-3 py-4 text-xs text-[var(--on-surface-variant)]">Start typing to search or run an action</p>
+          )}
+          {rows.map((row, i) => {
+            if (row.type === "action") {
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => selectRow(row)}
+                  className={clsx(
+                    "w-full text-left px-3 py-2 border-b border-[var(--outline-variant)]/10 flex flex-col gap-0.5",
+                    i === highlight ? "bg-[var(--primary)]/15" : "hover:bg-[var(--surface-container)]",
+                  )}
+                >
+                  <span className="text-xs font-medium text-[var(--on-surface)]">{row.title}</span>
+                  <span className="text-[10px] text-[var(--on-surface-variant)]">{row.subtitle}</span>
+                </button>
+              );
+            }
+            const r = row.result;
+            return (
+              <button
+                key={`${r.kind}-${r.id}`}
+                type="button"
+                onClick={() => selectRow(row)}
+                className={clsx(
+                  "w-full text-left px-3 py-2 border-b border-[var(--outline-variant)]/10 flex flex-col gap-0.5",
+                  i === highlight ? "bg-[var(--primary)]/15" : "hover:bg-[var(--surface-container)]",
+                )}
+              >
+                <span className="text-xs font-medium text-[var(--on-surface)] truncate">{r.title}</span>
+                <span className="text-[10px] text-[var(--on-surface-variant)]">
+                  {r.kind} · {r.subtitle}
+                </span>
+              </button>
+            );
+          })}
+          {loading && <p className="px-3 py-4 text-xs text-[var(--on-surface-variant)]">Searching…</p>}
         </div>
       </div>
     </div>
