@@ -8,6 +8,7 @@ import type { ConnectionId } from "../db/connections";
 import type { DataSource } from "../types";
 import { getIntegrationSettings, setIntegrationProvider } from "../db/integration-settings";
 import type { IntegrationCategory } from "../integrations/types";
+import { listAllDeveloperIntegrationIdentities, upsertDeveloperIntegrationIdentity } from "../db/developer-identity";
 
 interface ExportedDeveloper {
   id: string;
@@ -17,6 +18,8 @@ interface ExportedDeveloper {
   team: string;
   githubUsername?: string;
   atlassianEmail?: string;
+  /** Export format v3+ */
+  isCurrentUser?: boolean;
 }
 
 interface ExportedDataSource {
@@ -26,6 +29,7 @@ interface ExportedDataSource {
   org: string;
   identifier: string;
   metadata: Record<string, unknown>;
+  providerId?: string | null;
 }
 
 interface ExportedConnection {
@@ -46,6 +50,13 @@ interface ExportedIntegration {
   docs: string;
 }
 
+interface ExportedDeveloperIdentity {
+  developerId: string;
+  category: string;
+  providerId: string;
+  payload: Record<string, unknown>;
+}
+
 interface SettingsExport {
   version: number;
   exportedAt: string;
@@ -54,6 +65,27 @@ interface SettingsExport {
   developers: ExportedDeveloper[];
   developerSources: ExportedDeveloperSources[];
   integration?: ExportedIntegration;
+  /** Export format v3+ */
+  developerIdentities?: ExportedDeveloperIdentity[];
+}
+
+type ImportOutcome =
+  | "created"
+  | "updated"
+  | "skipped_duplicate"
+  | "reused_existing"
+  | "applied"
+  | "skipped";
+
+export interface ImportLine {
+  kind: "developer" | "dataSource" | "connection" | "integration" | "developerSources" | "developerIdentity";
+  label: string;
+  outcome: ImportOutcome;
+  reason?: string;
+}
+
+export interface SettingsImportResult {
+  lines: ImportLine[];
 }
 
 function buildExport(): SettingsExport {
@@ -67,9 +99,15 @@ function buildExport(): SettingsExport {
   }));
 
   const integration = getIntegrationSettings();
+  const developerIdentities = listAllDeveloperIntegrationIdentities().map((row) => ({
+    developerId: row.developerId,
+    category: row.category,
+    providerId: row.providerId,
+    payload: row.payload,
+  }));
 
   return {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     integration: {
       code: integration.code,
@@ -89,6 +127,7 @@ function buildExport(): SettingsExport {
       org: s.org,
       identifier: s.identifier,
       metadata: s.metadata,
+      providerId: s.providerId ?? undefined,
     })),
     developers: developers.map((d) => ({
       id: d.id,
@@ -98,8 +137,10 @@ function buildExport(): SettingsExport {
       team: d.team,
       githubUsername: d.githubUsername,
       atlassianEmail: d.atlassianEmail,
+      isCurrentUser: d.isCurrentUser,
     })),
     developerSources,
+    developerIdentities,
   };
 }
 
@@ -111,24 +152,101 @@ function findDuplicateDeveloperNames(data: SettingsExport): string[] {
     .map((d) => d.name);
 }
 
-function performImport(data: SettingsExport, overwriteDuplicates: boolean): void {
+const SECTION_ORDER: ImportLine["kind"][] = [
+  "developer",
+  "dataSource",
+  "developerSources",
+  "developerIdentity",
+  "connection",
+  "integration",
+];
+
+const SECTION_TITLE: Record<ImportLine["kind"], string> = {
+  developer: "Developers",
+  dataSource: "Data sources",
+  developerSources: "Developer ↔ data source links",
+  developerIdentity: "Developer integration identity",
+  connection: "Connections (email/org metadata only)",
+  integration: "Integration providers",
+};
+
+function outcomeVerb(outcome: ImportOutcome): string {
+  switch (outcome) {
+    case "created":
+      return "Created";
+    case "updated":
+      return "Updated";
+    case "skipped_duplicate":
+      return "Skipped (duplicate)";
+    case "reused_existing":
+      return "Reused existing";
+    case "applied":
+      return "Applied";
+    case "skipped":
+      return "Skipped";
+    default:
+      return outcome;
+  }
+}
+
+function formatImportReport(result: SettingsImportResult): string {
+  const byKind = new Map<ImportLine["kind"], ImportLine[]>();
+  for (const k of SECTION_ORDER) byKind.set(k, []);
+  for (const line of result.lines) {
+    byKind.get(line.kind)!.push(line);
+  }
+
+  const parts: string[] = [];
+  for (const kind of SECTION_ORDER) {
+    const lines = byKind.get(kind)!;
+    if (lines.length === 0) continue;
+    parts.push(SECTION_TITLE[kind]);
+    for (const line of lines) {
+      const why = line.reason ? ` — ${line.reason}` : "";
+      parts.push(`  • ${outcomeVerb(line.outcome)}: ${line.label}${why}`);
+    }
+    parts.push("");
+  }
+  return parts.join("\n").trimEnd();
+}
+
+function defaultProviderForCategory(cat: IntegrationCategory): string {
+  if (cat === "code") return "github";
+  if (cat === "work") return "jira";
+  return "confluence";
+}
+
+function parseIdentityCategory(c: string): IntegrationCategory | null {
+  if (c === "code" || c === "work" || c === "docs") return c;
+  return null;
+}
+
+function performImport(data: SettingsExport, overwriteDuplicates: boolean): SettingsImportResult {
+  const lines: ImportLine[] = [];
   const existingDevelopers = listDevelopers();
   const existingByName = new Map(existingDevelopers.map((d) => [d.name.toLowerCase(), d]));
 
   const existingSources = listSources();
   const existingSourceByKey = new Map(
-    existingSources.map((s) => [`${s.type}:${s.identifier}`, s])
+    existingSources.map((s) => [`${s.type}:${s.identifier}`, s]),
   );
 
-  // Map from imported source ID → actual source ID in DB
   const sourceIdMap = new Map<string, string>();
+  const skippedImportedDeveloperIds = new Set<string>();
+  const importedDevNameById = new Map(data.developers.map((d) => [d.id, d.name]));
 
-  // Upsert data sources (no secrets involved)
   for (const src of data.dataSources) {
     const key = `${src.type}:${src.identifier}`;
     const existing = existingSourceByKey.get(key);
+    const label = `${src.type}: ${src.name || src.identifier}`;
     if (existing) {
       sourceIdMap.set(src.id, existing.id);
+      lines.push({
+        kind: "dataSource",
+        label,
+        outcome: "reused_existing",
+        reason: "Same type and identifier already exists; kept existing row (including provider).",
+      });
     } else {
       const created = createSource({
         type: src.type as DataSource["type"],
@@ -136,27 +254,54 @@ function performImport(data: SettingsExport, overwriteDuplicates: boolean): void
         org: src.org,
         identifier: src.identifier,
         metadata: src.metadata,
+        providerId: src.providerId !== undefined && src.providerId !== null && src.providerId !== "" ? src.providerId : undefined,
       });
       sourceIdMap.set(src.id, created.id);
+      lines.push({ kind: "dataSource", label, outcome: "created" });
     }
   }
 
-  // Map from imported developer ID → actual developer ID in DB
   const developerIdMap = new Map<string, string>();
 
   for (const dev of data.developers) {
     const existing = existingByName.get(dev.name.toLowerCase());
     if (existing) {
       if (overwriteDuplicates) {
-        updateDeveloper(existing.id, {
+        const patch: {
+          name?: string;
+          role?: string;
+          team?: string;
+          isCurrentUser?: boolean;
+          githubUsername?: string;
+          atlassianEmail?: string;
+        } = {
           name: dev.name,
           role: dev.role,
           team: dev.team,
           githubUsername: dev.githubUsername,
           atlassianEmail: dev.atlassianEmail,
+        };
+        if (data.version >= 3 && typeof dev.isCurrentUser === "boolean") {
+          patch.isCurrentUser = dev.isCurrentUser;
+        }
+        updateDeveloper(existing.id, patch);
+        developerIdMap.set(dev.id, existing.id);
+        lines.push({
+          kind: "developer",
+          label: dev.name,
+          outcome: "updated",
+          reason: "Matched by name; replaced with values from the import file.",
+        });
+      } else {
+        developerIdMap.set(dev.id, existing.id);
+        skippedImportedDeveloperIds.add(dev.id);
+        lines.push({
+          kind: "developer",
+          label: dev.name,
+          outcome: "skipped_duplicate",
+          reason: "A developer with this name already exists.",
         });
       }
-      developerIdMap.set(dev.id, existing.id);
     } else {
       const created = createDeveloper({
         name: dev.name,
@@ -164,46 +309,159 @@ function performImport(data: SettingsExport, overwriteDuplicates: boolean): void
         team: dev.team,
         githubUsername: dev.githubUsername,
         atlassianEmail: dev.atlassianEmail,
+        isCurrentUser: data.version >= 3 && typeof dev.isCurrentUser === "boolean" ? dev.isCurrentUser : undefined,
       });
       developerIdMap.set(dev.id, created.id);
+      lines.push({ kind: "developer", label: dev.name, outcome: "created" });
     }
   }
 
-  // Restore developer-source associations
   for (const ds of data.developerSources) {
     const actualDevId = developerIdMap.get(ds.developerId);
     if (!actualDevId) continue;
-    const actualSourceIds = ds.sourceIds
-      .map((sid) => sourceIdMap.get(sid))
-      .filter((id): id is string => !!id);
+    const devName = importedDevNameById.get(ds.developerId) ?? ds.developerId;
+
+    if (skippedImportedDeveloperIds.has(ds.developerId)) {
+      lines.push({
+        kind: "developerSources",
+        label: devName,
+        outcome: "skipped",
+        reason: "Duplicate developer was skipped; kept existing data source assignments.",
+      });
+      continue;
+    }
+
+    const actualSourceIds = ds.sourceIds.map((sid) => sourceIdMap.get(sid)).filter((id): id is string => !!id);
     if (actualSourceIds.length > 0) {
       setSourcesForDeveloper(actualDevId, actualSourceIds);
+      lines.push({
+        kind: "developerSources",
+        label: `${devName} (${actualSourceIds.length} source${actualSourceIds.length === 1 ? "" : "s"})`,
+        outcome: "applied",
+      });
     }
   }
 
-  // Update connection metadata (email/org only — no secrets)
   for (const conn of data.connections) {
-    if (conn.id !== "github" && conn.id !== "atlassian" && conn.id !== "linear") continue;
+    if (conn.id !== "github" && conn.id !== "atlassian" && conn.id !== "linear") {
+      lines.push({
+        kind: "connection",
+        label: conn.id,
+        outcome: "skipped",
+        reason: "Only GitHub, Atlassian, and Linear connection metadata can be imported.",
+      });
+      continue;
+    }
     saveConnection(conn.id as ConnectionId, {
       email: conn.email,
       org: conn.org,
-      // never import `connected` state or tokens
+    });
+    lines.push({
+      kind: "connection",
+      label: conn.id,
+      outcome: "applied",
+      reason: "Email/org fields updated; tokens and connected state were not changed.",
     });
   }
 
   if (data.integration && data.version >= 2) {
     const integ = data.integration;
-    const apply = (cat: IntegrationCategory, pid: string) => {
+    const tryApply = (cat: IntegrationCategory, pid: string | undefined, short: string) => {
+      if (!pid?.trim()) {
+        lines.push({
+          kind: "integration",
+          label: short,
+          outcome: "skipped",
+          reason: "Not set in export file.",
+        });
+        return;
+      }
       try {
         setIntegrationProvider(cat, pid);
+        lines.push({
+          kind: "integration",
+          label: `${short} (${pid})`,
+          outcome: "applied",
+        });
       } catch {
-        /* ignore invalid provider ids from older exports */
+        lines.push({
+          kind: "integration",
+          label: `${short} (${pid})`,
+          outcome: "skipped",
+          reason: "Invalid provider for this app version.",
+        });
       }
     };
-    if (integ.code) apply("code", integ.code);
-    if (integ.work) apply("work", integ.work);
-    if (integ.docs) apply("docs", integ.docs);
+    tryApply("code", integ.code, "Code");
+    tryApply("work", integ.work, "Work");
+    tryApply("docs", integ.docs, "Docs");
+  } else if (data.version < 2) {
+    lines.push({
+      kind: "integration",
+      label: "Integration providers",
+      outcome: "skipped",
+      reason: "Not included in v1 export format.",
+    });
+  } else {
+    lines.push({
+      kind: "integration",
+      label: "Integration providers",
+      outcome: "skipped",
+      reason: "No integration block in this file.",
+    });
   }
+
+  if (data.version >= 3 && Array.isArray(data.developerIdentities)) {
+    for (const row of data.developerIdentities) {
+      const devName = importedDevNameById.get(row.developerId) ?? row.developerId;
+      const cat = parseIdentityCategory(row.category);
+      if (!cat) {
+        lines.push({
+          kind: "developerIdentity",
+          label: devName,
+          outcome: "skipped",
+          reason: `Unknown category "${row.category}".`,
+        });
+        continue;
+      }
+      if (skippedImportedDeveloperIds.has(row.developerId)) {
+        lines.push({
+          kind: "developerIdentity",
+          label: `${devName} (${cat})`,
+          outcome: "skipped",
+          reason: "Duplicate developer was skipped; kept existing integration identity.",
+        });
+        continue;
+      }
+      const actualDevId = developerIdMap.get(row.developerId);
+      if (!actualDevId) {
+        lines.push({
+          kind: "developerIdentity",
+          label: `${devName} (${cat})`,
+          outcome: "skipped",
+          reason: "Developer id from file was not mapped.",
+        });
+        continue;
+      }
+      const payload =
+        row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+          ? (row.payload as Record<string, unknown>)
+          : {};
+      const pid = row.providerId?.trim() || defaultProviderForCategory(cat);
+      upsertDeveloperIntegrationIdentity(actualDevId, cat, pid, payload);
+      lines.push({
+        kind: "developerIdentity",
+        label: `${devName} (${cat})`,
+        outcome: "applied",
+      });
+    }
+  }
+
+  return { lines };
+}
+
+function isValidExportVersion(v: unknown): v is number {
+  return v === 1 || v === 2 || v === 3;
 }
 
 export async function runExportSettings(win: BrowserWindow | null): Promise<void> {
@@ -236,7 +494,7 @@ export async function runImportSettings(win: BrowserWindow | null): Promise<void
   }
 
   if (
-    (data.version !== 1 && data.version !== 2) ||
+    !isValidExportVersion(data.version) ||
     !Array.isArray(data.developers) ||
     !Array.isArray(data.dataSources)
   ) {
@@ -253,10 +511,10 @@ export async function runImportSettings(win: BrowserWindow | null): Promise<void
     const { response } = await dialog.showMessageBox(win!, {
       type: "question",
       title: "Duplicate Developers Found",
-      message: "Some developers in the import already exist",
-      detail: `The following developers already exist:\n${list}${extra}\n\nDo you want to overwrite them with the imported data?`,
-      buttons: ["Overwrite", "Skip Duplicates", "Cancel"],
-      defaultId: 0,
+      message: "Some developers in the import already exist (matched by name).",
+      detail: `The following names already exist:\n${list}${extra}\n\nOverwrite: replace their roles, team, emails, GitHub username, “you” flag (v3+), then apply data sources and identity from this file.\nSkip: keep existing developer records and assignments; import everything else.\n\nYou will see a full import report when this finishes.`,
+      buttons: ["Overwrite", "Skip duplicates", "Cancel"],
+      defaultId: 1,
       cancelId: 2,
     });
     if (response === 2) return;
@@ -264,13 +522,19 @@ export async function runImportSettings(win: BrowserWindow | null): Promise<void
   }
 
   try {
-    performImport(data, overwrite);
+    const result = performImport(data, overwrite);
+    const detail = formatImportReport(result);
+    await dialog.showMessageBox(win!, {
+      type: "info",
+      title: "Import complete",
+      message: "Settings import finished. Review the details below.",
+      detail: detail || "No changes were recorded.",
+    });
   } catch (err: unknown) {
     await dialog.showErrorBox("Import Failed", (err as Error).message);
   }
 }
 
 export function registerSettingsIOHandlers(_getWindow: () => BrowserWindow | null) {
-  // No additional IPC handlers needed — export/import are driven from the menu in main.ts
-  void ipcMain; // keep import alive for potential future use
+  void ipcMain;
 }

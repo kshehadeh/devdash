@@ -2,9 +2,64 @@ import { getDb } from "./index";
 import type { IntegrationCategory } from "../integrations/types";
 import { getDeveloper } from "./developers";
 
+export interface DeveloperIntegrationIdentityExportRow {
+  developerId: string;
+  category: IntegrationCategory;
+  providerId: string;
+  payload: Record<string, unknown>;
+}
+
 interface Row {
   payload_json: string;
   provider_id: string;
+}
+
+function parsePayloadJson(payloadJson: string): Record<string, unknown> {
+  try {
+    const p = JSON.parse(payloadJson) as unknown;
+    return p && typeof p === "object" && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** All per-developer integration identity rows (for settings export). */
+export function listAllDeveloperIntegrationIdentities(): DeveloperIntegrationIdentityExportRow[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT developer_id, category, provider_id, payload_json FROM developer_integration_identity ORDER BY developer_id, category`,
+    )
+    .all() as { developer_id: string; category: string; provider_id: string; payload_json: string }[];
+  const out: DeveloperIntegrationIdentityExportRow[] = [];
+  for (const r of rows) {
+    if (r.category !== "code" && r.category !== "work" && r.category !== "docs") continue;
+    out.push({
+      developerId: r.developer_id,
+      category: r.category,
+      providerId: r.provider_id,
+      payload: parsePayloadJson(r.payload_json),
+    });
+  }
+  return out;
+}
+
+/** Replace category row payload and provider (settings import). */
+export function upsertDeveloperIntegrationIdentity(
+  developerId: string,
+  category: IntegrationCategory,
+  providerId: string,
+  payload: Record<string, unknown>,
+): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO developer_integration_identity (developer_id, category, provider_id, payload_json, updated_at)
+     VALUES (?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(developer_id, category) DO UPDATE SET
+       provider_id = excluded.provider_id,
+       payload_json = excluded.payload_json,
+       updated_at = excluded.updated_at`,
+  ).run(developerId, category, providerId, JSON.stringify(payload));
 }
 
 export function getIdentityPayload(developerId: string, category: IntegrationCategory): Record<string, unknown> {
@@ -15,12 +70,7 @@ export function getIdentityPayload(developerId: string, category: IntegrationCat
     )
     .get(developerId, category) as Row | undefined;
   if (!row?.payload_json) return {};
-  try {
-    const p = JSON.parse(row.payload_json) as unknown;
-    return p && typeof p === "object" && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
+  return parsePayloadJson(row.payload_json);
 }
 
 /** Email used to match the developer in work tools (Jira picker, Linear assignee filter). */
