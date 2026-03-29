@@ -4,6 +4,9 @@ node_modules/
 # Vite build output
 dist/
 
+# Opaque macOS .app icon (from `bun run icons:mac`; transparent src PNGs alone get a gray Finder plate)
+build/macos-app-icon.png
+
 # Electron build output
 electron/dist/
 dist-electron/
