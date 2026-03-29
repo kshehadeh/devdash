@@ -2,17 +2,32 @@ import { ipcMain } from "electron";
 import { hasUsableToken } from "../db/connections";
 import { getStatsContext } from "./stats-context";
 import {
-  fetchContributionCalendar, fetchPullRequests,
-  fetchMergeRatio, fetchVelocity,
+  fetchContributionCalendar,
+  fetchPullRequests,
+  fetchOpenAuthoredPullRequests,
+  fetchMergeRatio,
+  fetchVelocity,
 } from "../services/github";
-import { fetchJiraTickets, fetchCompletedTicketCount, fetchConfluenceDocs, fetchConfluenceActivity } from "../services/atlassian";
 import {
-  getCachedContributions, getCachedCommitsYTD, getCachedPullRequests,
-  hasFreshCache, getSyncStatus,
+  fetchJiraDashboardTickets,
+  fetchCompletedTicketCount,
+  fetchConfluenceDocs,
+  fetchConfluenceActivity,
+} from "../services/atlassian";
+import {
+  getCachedContributions,
+  getCachedCommitsYTD,
+  getCachedPullRequests,
+  getCachedOpenAuthoredPullRequests,
+  hasFreshCache,
+  getSyncStatus,
   computeCachedMergeRatio, computeCachedVelocity, computeCachedReviewTurnaroundHours,
-  getCachedJiraTickets, getCachedCompletedTicketCount,
-  getCachedConfluencePages, getCachedConfluenceActivity,
-  getCachedLinearTicketsAsJiraShape, getCachedLinearCompletedCount,
+  getCachedJiraDashboardTickets,
+  getCachedCompletedTicketCount,
+  getCachedConfluencePages,
+  getCachedConfluenceActivity,
+  getCachedLinearDashboardTicketsAsJiraShape,
+  getCachedLinearCompletedCount,
   countCachedPRReviewCommentsAuthored,
   countCachedPRCommentsReceived,
   countCachedPRApprovalsGiven,
@@ -48,6 +63,7 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
       commitHistory: [],
       commitsYTD: 0,
       pullRequests: [],
+      openAuthoredPullRequests: [],
     };
   }
 
@@ -56,6 +72,7 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
       commitHistory: [],
       commitsYTD: 0,
       pullRequests: [],
+      openAuthoredPullRequests: [],
       providerId: "github",
     };
   }
@@ -67,11 +84,13 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
     const commitHistory = getCachedContributions(id) ?? [];
     const commitsYTD = getCachedCommitsYTD(id);
     const pullRequests = getCachedPullRequests(id, days, ctx.repoFilter);
+    const openAuthoredPullRequests = getCachedOpenAuthoredPullRequests(id, ctx.repoFilter);
     const sync = getSyncStatus(id, "github_contributions") ?? getSyncStatus(id, "github_pull_requests");
     return {
       commitHistory,
       commitsYTD,
       pullRequests,
+      openAuthoredPullRequests,
       providerId: "github",
       _syncedAt: sync?.lastSyncedAt,
     };
@@ -84,15 +103,21 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
   let commitHistory: CommitDay[] = [];
   let commitsYTD = 0;
   let pullRequests: PullRequest[] = [];
+  let openAuthoredPullRequests: PullRequest[] = [];
 
   if (hasUsableToken(ctx.ghConn) && ctx.ghUsername) {
     const prPromise =
       ctx.repoFilter.length > 0
         ? fetchPullRequests(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter, days)
         : Promise.resolve([]);
+    const openPrPromise =
+      ctx.repoFilter.length > 0
+        ? fetchOpenAuthoredPullRequests(ctx.ghConn.token, ctx.ghUsername, ctx.repoFilter)
+        : Promise.resolve([]);
     const results = await Promise.allSettled([
       fetchContributionCalendar(ctx.ghConn.token, ctx.ghUsername),
       prPromise,
+      openPrPromise,
     ]);
     if (results[0].status === "fulfilled") {
       commitHistory = results[0].value.commits;
@@ -101,12 +126,16 @@ async function buildGithubStats(id: string, days: number): Promise<GithubStatsRe
     if (results[1].status === "fulfilled") {
       pullRequests = results[1].value;
     }
+    if (results[2].status === "fulfilled") {
+      openAuthoredPullRequests = results[2].value;
+    }
   }
 
   return {
     commitHistory,
     commitsYTD,
     pullRequests,
+    openAuthoredPullRequests,
     providerId: "github",
   };
 }
@@ -167,7 +196,7 @@ async function buildTicketsStats(id: string, days: number): Promise<TicketsStats
 
   if (ctx.integration.work === "jira") {
     if (hasFreshCache(id, "jira_tickets") && ctx.atConn?.org) {
-      const jiraTickets = getCachedJiraTickets(id, ctx.atConn.org, days, ctx.projectFilter);
+      const jiraTickets = getCachedJiraDashboardTickets(id, ctx.atConn.org, ctx.projectFilter);
       const ticketVelocity = getCachedCompletedTicketCount(id, days, ctx.projectFilter);
       const syncedAt = getSyncStatus(id, "jira_tickets")?.lastSyncedAt;
       return {
@@ -195,7 +224,7 @@ async function buildTicketsStats(id: string, days: number): Promise<TicketsStats
       ctx.projectFilter.length > 0
     ) {
       const [t, v] = await Promise.allSettled([
-        fetchJiraTickets(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.workEmail, ctx.projectFilter, days),
+        fetchJiraDashboardTickets(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.workEmail, ctx.projectFilter),
         fetchCompletedTicketCount(ctx.atConn.org, ctx.atConn.email, ctx.atConn.token, ctx.workEmail, ctx.projectFilter, days),
       ]);
       if (t.status === "fulfilled") jiraTickets = t.value;
@@ -212,9 +241,8 @@ async function buildTicketsStats(id: string, days: number): Promise<TicketsStats
 
   if (ctx.integration.work === "linear") {
     if (hasFreshCache(id, "linear_issues")) {
-      const jiraTickets = getCachedLinearTicketsAsJiraShape(
+      const jiraTickets = getCachedLinearDashboardTicketsAsJiraShape(
         id,
-        days,
         ctx.linearTeamFilter,
         ctx.linearConn?.org ?? undefined,
       );
@@ -376,7 +404,7 @@ async function buildWeeklyReportMarkdown(developerId: string, days: number): Pro
   const comments = await buildPRReviewCommentsStats(developerId, days);
 
   const merged = gh.pullRequests.filter((p) => p.status === "merged");
-  const openPrs = gh.pullRequests.filter((p) => p.status === "open");
+  const openPrs = gh.openAuthoredPullRequests;
   const inProgress = tickets.jiraTickets.filter((t) => t.statusCategory === "in_progress");
   const todo = tickets.jiraTickets.filter((t) => t.statusCategory === "todo");
 
@@ -401,7 +429,7 @@ async function buildWeeklyReportMarkdown(developerId: string, days: number): Pro
   for (const p of merged.slice(0, 20)) {
     lines.push(`  - [${p.title}](${p.url}) (${p.repo}#${p.number})`);
   }
-  lines.push(`- Still open (sample): **${openPrs.length}** in list`);
+  lines.push(`- Open (authored): **${openPrs.length}**`);
   for (const p of openPrs.slice(0, 10)) {
     lines.push(`  - [${p.title}](${p.url})`);
   }

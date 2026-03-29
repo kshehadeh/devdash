@@ -297,15 +297,15 @@ export default function DashboardPage() {
                             <div className="flex items-center gap-2">
                               <Github size={16} className="text-[var(--primary)]" />
                               <h3 className="text-sm font-semibold text-[var(--on-surface)]">Pull Requests</h3>
-                              {github.data.pullRequests.length > 0 && (
+                              {(github.data.openAuthoredPullRequests?.length ?? 0) > 0 && (
                                 <span className="text-[10px] font-label font-bold bg-[var(--primary-container)] text-[var(--on-primary)] px-1.5 py-0.5 rounded-full">
-                                  {github.data.pullRequests.length}
+                                  {github.data.openAuthoredPullRequests?.length ?? 0}
                                 </span>
                               )}
                             </div>
-                            <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Last {lookbackDays} days</span>
+                            <span className="text-[10px] font-label text-[var(--on-surface-variant)]">Open</span>
                           </div>
-                          <PullRequestList prs={github.data.pullRequests} />
+                          <PullRequestList prs={github.data.openAuthoredPullRequests ?? []} />
                         </Card>
                       ) : null
                     ) : null}
@@ -327,7 +327,7 @@ export default function DashboardPage() {
                               )}
                             </div>
                             <span className="text-[10px] font-label text-[var(--on-surface-variant)] uppercase tracking-wider">
-                              Last {lookbackDays} days
+                              Active
                             </span>
                           </div>
                           <JiraTicketList tickets={tickets.data.jiraTickets} onInvalidTicket={tickets.refresh} />

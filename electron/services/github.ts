@@ -345,6 +345,64 @@ export async function fetchPullRequests(
   return withReviews;
 }
 
+const OPEN_AUTHORED_PR_SEARCH_LIMIT = 100;
+
+/** Open PRs authored by the user in assigned repos (no created-date filter). */
+export async function fetchOpenAuthoredPullRequests(
+  token: string,
+  username: string,
+  repos?: { org: string; name: string }[],
+): Promise<PullRequest[]> {
+  if (repos && repos.length === 0) return [];
+
+  const repoFilter =
+    repos && repos.length > 0 ? repos.map((r) => `repo:${r.org}/${r.name}`).join(" ") : "";
+
+  const q = `type:pr author:${username} is:open ${repoFilter} sort:updated-desc`.trim();
+  const url = `${GITHUB_API}/search/issues?q=${encodeURIComponent(q)}&per_page=${OPEN_AUTHORED_PR_SEARCH_LIMIT}`;
+  const res = await fetch(url, { headers: headers(token) });
+  if (!res.ok) return [];
+
+  const data: SearchPRResponse = await res.json();
+  const prs: PullRequest[] = (data.items ?? []).map((item) => {
+    const repoPath = item.repository_url.replace("https://api.github.com/repos/", "");
+    return {
+      id: `pr-${item.number}`,
+      title: item.title,
+      repo: repoPath,
+      number: item.number,
+      url: item.html_url,
+      status: "open" as const,
+      reviewCount: item.review_comments || item.requested_reviewers?.length || 0,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+      mergedAt: null,
+      firstReviewSubmittedAt: null,
+      timeAgo: timeAgo(item.updated_at),
+      isActive: true,
+    };
+  });
+
+  const withReviews = await Promise.all(
+    prs.map(async (pr) => {
+      try {
+        const r = await fetch(`${GITHUB_API}/repos/${pr.repo}/pulls/${pr.number}/reviews`, {
+          headers: headers(token),
+        });
+        if (r.ok) {
+          const reviews: { state: string }[] = await r.json();
+          return { ...pr, reviewCount: reviews.length };
+        }
+      } catch {
+        /* ignore */
+      }
+      return pr;
+    }),
+  );
+
+  return withReviews;
+}
+
 export async function fetchMergeRatio(
   token: string,
   username: string,

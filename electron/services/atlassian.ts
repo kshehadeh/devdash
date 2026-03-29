@@ -111,6 +111,78 @@ export async function fetchJiraTickets(
   }));
 }
 
+/** Assigned To Do + In Progress issues, no updated lookback (dashboard). In-progress first, then updated DESC. */
+export async function fetchJiraDashboardTickets(
+  site: string,
+  email: string,
+  token: string,
+  atlassianEmail: string,
+  projectKeys?: string[],
+): Promise<JiraTicket[]> {
+  if (projectKeys !== undefined && projectKeys.length === 0) return [];
+
+  const baseUrl = `https://${site}.atlassian.net`;
+  const hdrs = headers(email, token);
+
+  const projectFilter =
+    projectKeys && projectKeys.length > 0 ? ` AND project IN (${jqlProjectKeysInList(projectKeys)})` : "";
+
+  const accountId = await resolveAccountId(site, email, token, atlassianEmail);
+  if (!accountId) {
+    console.error("[JiraDashboardTickets] Could not resolve Atlassian account ID for:", atlassianEmail);
+    return [];
+  }
+
+  const jql = `assignee = "${accountId}" AND (statusCategory = "To Do" OR statusCategory = "In Progress")${projectFilter} ORDER BY updated DESC`;
+
+  const res = await fetch(`${baseUrl}/rest/api/3/search/jql`, {
+    method: "POST",
+    headers: { ...hdrs, "Content-Type": "application/json" },
+    body: JSON.stringify({ jql, maxResults: 50, fields: ["summary", "status", "priority", "issuetype", "updated"] }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[JiraDashboardTickets] search failed:", res.status, body);
+    return [];
+  }
+
+  const data = await res.json();
+  const issues: {
+    id: string;
+    key: string;
+    fields: {
+      summary: string;
+      status: { name: string; statusCategory: { key: string } };
+      priority: { name: string };
+      issuetype: { name: string };
+      updated: string;
+    };
+  }[] = data.issues ?? [];
+
+  const tickets: JiraTicket[] = issues.map((issue) => ({
+    id: issue.id,
+    key: issue.key,
+    title: issue.fields.summary,
+    status: issue.fields.status.name,
+    statusCategory: jiraStatusCategoryFromApi(issue.fields.status.statusCategory.key),
+    priority: mapPriority(issue.fields.priority.name),
+    type: issue.fields.issuetype.name,
+    updatedAt: issue.fields.updated,
+    updatedAgo: timeAgo(issue.fields.updated),
+    url: `${baseUrl}/browse/${issue.key}`,
+  }));
+
+  tickets.sort((a, b) => {
+    const ap = a.statusCategory === "in_progress" ? 0 : 1;
+    const bp = b.statusCategory === "in_progress" ? 0 : 1;
+    if (ap !== bp) return ap - bp;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+
+  return tickets;
+}
+
 // ---------- Jira Notifications (assigned to me or watched by me, recently updated) ----------
 
 export async function fetchJiraAssignedOrWatchedUpdatedTickets(

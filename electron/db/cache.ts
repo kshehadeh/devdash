@@ -103,6 +103,48 @@ function spaceClause(spaceKeys: string[] | undefined): { sql: string; values: st
   return { sql: ` AND space_key IN (${spaceKeys.map(() => "?").join(",")})`, values: spaceKeys };
 }
 
+/** Open authored PRs in assigned repos (no created-date window; dashboard widget). */
+export function getCachedOpenAuthoredPullRequests(devId: string, repos?: { org: string; name: string }[]): PullRequest[] {
+  if (repos && repos.length === 0) return [];
+
+  const db = getDb();
+  const { sql: repoSql, values: repoValues } = repoClause(repos);
+
+  const rows = db.prepare(`
+    SELECT pr_number, repo, title, status, review_count, created_at, updated_at, merged_at, first_review_submitted_at
+    FROM cached_pull_requests
+    WHERE developer_id = ? AND status = 'open'${repoSql}
+    ORDER BY updated_at DESC
+    LIMIT 100
+  `).all(devId, ...repoValues) as {
+    pr_number: number;
+    repo: string;
+    title: string;
+    status: string;
+    review_count: number;
+    created_at: string;
+    updated_at: string;
+    merged_at: string | null;
+    first_review_submitted_at: string | null;
+  }[];
+
+  return rows.map((row) => ({
+    id: `pr-${row.pr_number}`,
+    title: row.title,
+    repo: row.repo,
+    number: row.pr_number,
+    url: `https://github.com/${row.repo}/pull/${row.pr_number}`,
+    status: row.status as PullRequest["status"],
+    reviewCount: row.review_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    mergedAt: row.merged_at,
+    firstReviewSubmittedAt: row.first_review_submitted_at,
+    timeAgo: timeAgo(row.updated_at),
+    isActive: true,
+  }));
+}
+
 export function getCachedPullRequests(devId: string, days: number, repos?: { org: string; name: string }[]): PullRequest[] {
   const db = getDb();
   const since = new Date();
@@ -427,6 +469,43 @@ export function getCachedJiraTickets(devId: string, site: string, days: number, 
   }));
 }
 
+/** To Do + In Progress tickets, no updated-at lookback (dashboard list). In-progress first, then by updated_at DESC. */
+export function getCachedJiraDashboardTickets(devId: string, site: string, projectKeys?: string[]): JiraTicket[] {
+  const db = getDb();
+  const { sql: projSql, values: projValues } = projectClause(projectKeys);
+
+  const rows = db.prepare(`
+    SELECT issue_key, summary, status, status_category, priority, issue_type, project_key, updated_at
+    FROM cached_jira_tickets
+    WHERE developer_id = ? AND status_category IN ('todo', 'in_progress')${projSql}
+    ORDER BY CASE WHEN status_category = 'in_progress' THEN 0 ELSE 1 END, updated_at DESC
+    LIMIT 50
+  `).all(devId, ...projValues) as {
+    issue_key: string;
+    summary: string;
+    status: string;
+    status_category: string;
+    priority: string;
+    issue_type: string;
+    project_key: string | null;
+    updated_at: string;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.issue_key,
+    key: row.issue_key,
+    developerId: devId,
+    title: row.summary,
+    status: row.status,
+    statusCategory: row.status_category as "todo" | "in_progress" | "done",
+    priority: row.priority as JiraTicket["priority"],
+    type: row.issue_type,
+    updatedAt: row.updated_at,
+    updatedAgo: timeAgo(row.updated_at),
+    url: `https://${site}.atlassian.net/browse/${row.issue_key}`,
+  }));
+}
+
 export function getCachedCompletedTicketCount(devId: string, days: number, projectKeys?: string[]): number {
   const db = getDb();
   const since = new Date();
@@ -522,6 +601,49 @@ export function getCachedLinearTicketsAsJiraShape(
     ORDER BY updated_at DESC
     LIMIT 50
   `).all(devId, sinceStr, ...teamValues) as {
+    identifier: string;
+    title: string;
+    state_name: string;
+    state_type: string;
+    team_key: string | null;
+    updated_at: string;
+  }[];
+
+  return rows.map((row) => {
+    const cat = linearStateTypeToCategory(row.state_type);
+    return {
+      id: row.identifier,
+      key: row.identifier,
+      developerId: devId,
+      title: row.title,
+      status: row.state_name || "Open",
+      statusCategory: cat,
+      priority: "medium" as const,
+      type: "Issue",
+      updatedAt: row.updated_at,
+      updatedAgo: timeAgo(row.updated_at),
+      url: linearIssueUrl(workspaceSlug, row.identifier),
+    };
+  });
+}
+
+/** Non-completed Linear issues, no updated lookback; started (in progress) first, then updated_at DESC. */
+export function getCachedLinearDashboardTicketsAsJiraShape(
+  devId: string,
+  teamIds: string[] | undefined,
+  workspaceSlug?: string,
+): JiraTicket[] {
+  const db = getDb();
+  const { sql: teamSql, values: teamValues } = linearTeamIdClause(teamIds);
+
+  const rows = db.prepare(`
+    SELECT identifier, title, state_name, state_type, team_key, updated_at
+    FROM cached_linear_issues
+    WHERE developer_id = ?
+      AND LOWER(state_type) NOT IN ('completed', 'canceled')${teamSql}
+    ORDER BY CASE WHEN LOWER(state_type) = 'started' THEN 0 ELSE 1 END, updated_at DESC
+    LIMIT 50
+  `).all(devId, ...teamValues) as {
     identifier: string;
     title: string;
     state_name: string;

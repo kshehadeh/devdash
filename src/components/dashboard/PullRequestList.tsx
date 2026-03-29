@@ -58,12 +58,12 @@ export function PullRequestList({
   staleWarnDays = DEFAULT_WARN,
   staleDangerDays = DEFAULT_DANGER,
 }: PullRequestListProps) {
-  const visible = prs.filter((pr) => pr.status !== "closed");
+  const visible = prs.filter((pr) => pr.status === "open");
   const { showContextMenu } = useContextMenu();
 
   if (visible.length === 0) {
     return (
-      <p className="text-sm text-[var(--on-surface-variant)] py-3">No open or merged pull requests.</p>
+      <p className="text-sm text-[var(--on-surface-variant)] py-3">No open pull requests.</p>
     );
   }
 

@@ -118,7 +118,10 @@ export interface DeveloperStats {
 export interface GithubStatsResponse {
   commitHistory: CommitDay[];
   commitsYTD: number;
+  /** Authored PRs with created date in the selected lookback (weekly report, metrics context) */
   pullRequests: PullRequest[];
+  /** Open PRs you authored; not limited by lookback (dashboard widget) */
+  openAuthoredPullRequests: PullRequest[];
   /** Present when served through the integration layer */
   providerId?: "github";
   _syncedAt?: string;
