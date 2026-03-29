@@ -1,5 +1,5 @@
 import { getDb } from "./index";
-import { encrypt, decrypt } from "./crypto";
+import { encrypt, decrypt, shouldMigrateEncryptedEnvelope } from "./crypto";
 
 export type ConnectionId = "github" | "atlassian" | "linear";
 
@@ -37,6 +37,12 @@ function rowToModel(row: DbRow): ConnectionRecord {
   if (row.encrypted_token) {
     try {
       token = decrypt(row.encrypted_token);
+      if (token && shouldMigrateEncryptedEnvelope(row.encrypted_token)) {
+        const db = getDb();
+        db.prepare(
+          `UPDATE connections SET encrypted_token = ?, updated_at = datetime('now') WHERE id = ?`,
+        ).run(encrypt(token), row.id);
+      }
     } catch (err) {
       // Token cannot be decrypted on this machine/session; force reconnect.
       console.warn(`[connections] Invalid encrypted token for ${row.id}:`, err);
