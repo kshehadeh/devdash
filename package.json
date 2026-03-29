@@ -27,7 +27,10 @@
     "files": [
       "dist/**/*",
       "electron/dist/**/*",
-      "package.json"
+      "package.json",
+      "build/*.png",
+      "src/assets/icon.png",
+      "src/assets/icon-white.png"
     ],
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**",
