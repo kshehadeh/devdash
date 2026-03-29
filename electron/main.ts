@@ -281,17 +281,6 @@ function showAboutDialog() {
   });
 }
 
-function syncDockIconWithTheme() {
-  if (process.platform !== "darwin") return;
-  const icon = getThemedIconImage();
-  if (!icon) return;
-  try {
-    app.dock?.setIcon(icon);
-  } catch {
-    // non-fatal: dock icon update failed
-  }
-}
-
 function setupProtocol() {
   protocol.handle("app", (req) => {
     const url = new URL(req.url);
@@ -494,11 +483,8 @@ app.whenReady().then(() => {
 
   if (!isDev) setupProtocol();
 
-  // Keep dock/about icon aligned with macOS light/dark appearance.
-  syncDockIconWithTheme();
   nativeTheme.on("updated", () => {
     setupAboutPanel();
-    syncDockIconWithTheme();
   });
 
   registerAllHandlers(() => mainWindow);
