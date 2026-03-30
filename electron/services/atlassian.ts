@@ -25,6 +25,14 @@ function timeAgo(dateStr: string): string {
   return `${days} days ago`;
 }
 
+function mapPriority(name?: string | null): "low" | "medium" | "high" | "critical" {
+  const rawPriority = (name ?? "Medium").toLowerCase();
+  if (rawPriority === "highest" || rawPriority === "critical" || rawPriority === "blocker") return "critical";
+  if (rawPriority === "high") return "high";
+  if (rawPriority === "low" || rawPriority === "lowest") return "low";
+  return "medium";
+}
+
 // ---------- Jira ----------
 
 function jqlProjectKeysInList(keys: string[]): string {
