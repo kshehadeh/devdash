@@ -1,14 +1,95 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Trash2, Plus, Database } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Trash2, Plus, Database, Upload } from "lucide-react";
 import { invoke } from "@/lib/api";
 import { DEVELOPER_SOURCES_CHANGED_EVENT } from "@/lib/app-events";
 import { DataSourcesChecklist } from "@/components/dashboard/DataSourcesChecklist";
 import { Dialog } from "@/components/ui/Dialog";
+import { useAppStatus } from "@/context/AppStatusContext";
 import type { DataSource, Developer } from "@/lib/types";
 
 function newRowId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+type CsvParseResult = { headers: string[]; rows: string[][] };
+
+function parseCsv(text: string): CsvParseResult {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+
+  function pushField() {
+    row.push(field);
+    field = "";
+  }
+
+  function pushRow() {
+    rows.push(row);
+    row = [];
+  }
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        const next = text[i + 1];
+        if (next === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (ch === ",") {
+      pushField();
+      continue;
+    }
+
+    if (ch === "\n") {
+      pushField();
+      pushRow();
+      continue;
+    }
+
+    if (ch === "\r") {
+      continue;
+    }
+
+    field += ch;
+  }
+
+  if (inQuotes) {
+    throw new Error("CSV parse error: Unterminated quote.");
+  }
+
+  if (field.length > 0 || row.length > 0) {
+    pushField();
+    pushRow();
+  }
+
+  const [rawHeaders, ...dataRows] = rows;
+  if (!rawHeaders) return { headers: [], rows: [] };
+  return { headers: rawHeaders.map((h) => h.trim()), rows: dataRows };
+}
+
+function normalizeHeader(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
 }
 
 interface BulkRow {
@@ -39,12 +120,9 @@ type RowKind = "empty" | "complete" | "partial";
 
 function classifyRow(row: BulkRow): RowKind {
   const n = row.name.trim();
-  const r = row.role.trim();
-  const t = row.team.trim();
-  const req = [n, r, t];
-  const filled = req.filter(Boolean).length;
-  if (filled === 0) return "empty";
-  if (filled === 3) return "complete";
+  const e = row.atlassianEmail.trim();
+  if (!n && !e) return "empty";
+  if (n && e) return "complete";
   return "partial";
 }
 
@@ -56,6 +134,8 @@ interface BulkDevelopersFormProps {
 
 export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormProps) {
   const [rows, setRows] = useState<BulkRow[]>(() => [emptyRow()]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { pushNotification } = useAppStatus();
   const [allSources, setAllSources] = useState<DataSource[]>([]);
   const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [pickerRowId, setPickerRowId] = useState<string | null>(null);
@@ -96,6 +176,13 @@ export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormP
     setPickerRowId(null);
   }, [pickerRowId, pickerDraft]);
 
+  const applyPickerToAll = useCallback(() => {
+    const ids = [...pickerDraft];
+    setRows((prev) => prev.map((row) => ({ ...row, sourceIds: ids })));
+    setPickerRowId(null);
+    pushNotification({ message: "Applied sources to all rows.", type: "success", ttlMs: 2500 });
+  }, [pickerDraft, pushNotification]);
+
   function togglePickerSource(sourceId: string) {
     setPickerDraft((prev) => {
       const next = new Set(prev);
@@ -123,6 +210,76 @@ export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormP
     setRows((prev) => [...prev, emptyRow()]);
   }
 
+  function triggerCsvImport() {
+    setError(null);
+    fileInputRef.current?.click();
+  }
+
+  async function handleCsvFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseCsv(text);
+      if (parsed.headers.length === 0) {
+        setError("CSV looks empty. Provide a header row with name and email.");
+        return;
+      }
+
+      const headerIndex = new Map<string, number>();
+      parsed.headers.forEach((h, i) => {
+        const key = normalizeHeader(h);
+        if (key) headerIndex.set(key, i);
+      });
+
+      const nameIdx = headerIndex.get("name");
+      const emailIdx = headerIndex.get("email");
+      if (nameIdx === undefined || emailIdx === undefined) {
+        setError("CSV must include headers for name and email.");
+        return;
+      }
+
+      const githubIdx = headerIndex.get("github_username");
+      const roleIdx = headerIndex.get("role");
+      const teamIdx = headerIndex.get("team");
+
+      const imported: BulkRow[] = [];
+      parsed.rows.forEach((dataRow) => {
+        const name = (dataRow[nameIdx] ?? "").trim();
+        const email = (dataRow[emailIdx] ?? "").trim();
+        const github = githubIdx !== undefined ? (dataRow[githubIdx] ?? "").trim() : "";
+        const role = roleIdx !== undefined ? (dataRow[roleIdx] ?? "").trim() : "";
+        const team = teamIdx !== undefined ? (dataRow[teamIdx] ?? "").trim() : "";
+
+        if (!name && !email && !github && !role && !team) return;
+
+        imported.push({
+          id: newRowId(),
+          name,
+          role,
+          team,
+          githubUsername: github,
+          atlassianEmail: email,
+          isCurrentUser: false,
+          sourceIds: [],
+        });
+      });
+
+      if (imported.length === 0) {
+        setError("No usable rows found in the CSV.");
+        return;
+      }
+
+      setRows((prev) => [...prev, ...imported]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg || "Failed to import CSV.");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   function removeRow(id: string) {
     setPickerRowId((p) => (p === id ? null : p));
     setRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.id !== id)));
@@ -146,13 +303,13 @@ export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormP
     if (validation.partial.length > 0) {
       const label = validation.partial[0].name.trim() || "(unnamed row)";
       setError(
-        `Each row must have name, role, and team filled in, or leave the row empty. Fix row starting with "${label.slice(0, 40)}${label.length > 40 ? "…" : ""}".`,
+        `Each row must have name and work email filled in, or leave the row empty. Fix row starting with "${label.slice(0, 40)}${label.length > 40 ? "…" : ""}".`,
       );
       return;
     }
 
     if (validation.completeCount === 0) {
-      setError("Add at least one developer with name, role, and team.");
+      setError("Add at least one developer with name and work email.");
       return;
     }
 
@@ -166,8 +323,8 @@ export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormP
         try {
           const dev = await invoke<Developer>("developers:create", {
             name: row.name.trim(),
-            role: row.role.trim(),
-            team: row.team.trim(),
+            role: row.role.trim() || "Unassigned",
+            team: row.team.trim() || "Unassigned",
             isCurrentUser: row.isCurrentUser,
             githubUsername: row.githubUsername.trim() || undefined,
             atlassianEmail: row.atlassianEmail.trim() || undefined,
@@ -201,8 +358,9 @@ export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormP
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
           <p className="text-sm text-[var(--on-surface-variant)]">
-            Add several developers in one go. Each row needs name, role, and team. Optional GitHub username and work email
-            (Jira and Linear assignee, Confluence). Pick data sources per row before saving.
+            Add several developers in one go. Each row needs name and work email (Jira and Linear assignee, Confluence).
+            Role and team are optional and will default to "Unassigned" if left blank. CSV import supports headers: name,
+            email, github_username, role, team.
           </p>
 
           <div className="overflow-x-auto rounded-lg border border-[var(--outline-variant)]/25">
@@ -305,14 +463,31 @@ export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormP
             </table>
           </div>
 
-          <button
-            type="button"
-            onClick={addRow}
-            className="self-start inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[var(--primary)] hover:bg-[var(--primary)]/10"
-          >
-            <Plus size={16} />
-            Add row
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={addRow}
+              className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[var(--primary)] hover:bg-[var(--primary)]/10"
+            >
+              <Plus size={16} />
+              Add row
+            </button>
+            <button
+              type="button"
+              onClick={triggerCsvImport}
+              className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[var(--on-surface)] border border-[var(--outline-variant)]/40 hover:bg-[var(--surface-container-high)]"
+            >
+              <Upload size={16} />
+              Import CSV
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleCsvFile}
+              className="hidden"
+            />
+          </div>
 
           {!sourcesLoaded && <p className="text-xs text-[var(--on-surface-variant)]">Loading data sources…</p>}
 
@@ -371,7 +546,14 @@ export function BulkDevelopersForm({ onCancel, onComplete }: BulkDevelopersFormP
                 onClick={savePicker}
                 className="px-3 py-1.5 text-sm rounded-md bg-[var(--primary)] text-[var(--on-primary)] font-medium"
               >
-                Done
+                Apply
+              </button>
+              <button
+                type="button"
+                onClick={applyPickerToAll}
+                className="px-3 py-1.5 text-sm rounded-md border border-[var(--outline-variant)]/40 bg-[var(--surface-container-high)] text-[var(--on-surface)]"
+              >
+                Apply to all
               </button>
             </div>
           </>
