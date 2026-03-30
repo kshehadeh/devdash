@@ -4,7 +4,8 @@
   "private": true,
   "main": "electron/dist/main.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && bun run electron:compile && electron electron/dist/main.js\"",
+    "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && bun run electron:compile && bun run electron:launch\"",
+    "electron:launch": "bun scripts/launch-electron.ts",
     "build": "vite build",
     "lint": "eslint",
     "electron:compile": "tsc --project electron/tsconfig.json",
