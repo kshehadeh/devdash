@@ -14,6 +14,17 @@ export interface ContextMenuAction {
   remindAt?: string;
 }
 
+export type ConsoleLogLevel = "log" | "warn" | "error";
+export type ConsoleLogSource = "main" | "renderer";
+
+export interface ConsoleLogEntry {
+  id: string;
+  timestamp: string;
+  level: ConsoleLogLevel;
+  source: ConsoleLogSource;
+  message: string;
+}
+
 declare global {
   interface Window {
     electron: {
@@ -29,6 +40,8 @@ declare global {
       onRemindersChanged: (callback: () => void) => () => void;
       onReminderNavigate: (callback: (payload: { id: string }) => void) => () => void;
       onContextMenuAction: (callback: (payload: ContextMenuAction) => void) => () => void;
+      onConsoleLog: (callback: (payload: ConsoleLogEntry) => void) => () => void;
+      sendConsoleLog: (payload: { level: ConsoleLogLevel; message: string; source: "renderer" }) => void;
     };
   }
 }

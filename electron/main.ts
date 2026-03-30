@@ -10,8 +10,10 @@ import { startNotificationScheduler } from "./notifications/scheduler";
 import { startReminderScheduler } from "./reminders/scheduler";
 import { initTray, isTrayActive } from "./tray";
 import { getConfig } from "./db/config";
+import { setConsoleLogEmitter, startMainConsoleCapture } from "./console-logs";
 
 const isDev = process.env.NODE_ENV === "development";
+startMainConsoleCapture();
 
 // Must be called before app.whenReady() — registers the custom scheme as privileged
 // so it can load ES modules, use fetch, etc.
@@ -480,6 +482,11 @@ app.whenReady().then(() => {
   ensureDatabaseReady();
   app.setName("DevDash");
   setupAboutPanel();
+
+  setConsoleLogEmitter((entry) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("dev:console-log", entry);
+  });
 
   if (!isDev) setupProtocol();
 

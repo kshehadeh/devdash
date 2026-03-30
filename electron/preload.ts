@@ -83,4 +83,14 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.removeListener("context-menu:action", handler);
     };
   },
+  onConsoleLog: (callback: (payload: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload);
+    ipcRenderer.on("dev:console-log", handler);
+    return () => {
+      ipcRenderer.removeListener("dev:console-log", handler);
+    };
+  },
+  sendConsoleLog: (payload: { level: "log" | "warn" | "error"; message: string; source: "renderer" }) => {
+    ipcRenderer.send("dev:append-console-log", payload);
+  },
 });
