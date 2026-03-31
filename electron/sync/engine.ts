@@ -65,6 +65,13 @@ export async function syncDeveloper(developerId: string, opts: SyncDeveloperOpti
 
   if (!isNetworkOnline()) return;
 
+  // For single-developer syncs, run repo-level sync first to ensure review data is fresh
+  if (scope === "single" && !silent) {
+    await syncAllReposOnce().catch((err) =>
+      console.error("[Sync] Repo-level GitHub sync error (single dev):", err),
+    );
+  }
+
   const db = getDb();
   const row = db.prepare("SELECT name FROM developers WHERE id = ?").get(developerId) as { name: string } | undefined;
   const developerName = row?.name ?? "Developer";
@@ -150,11 +157,34 @@ export async function syncAll(): Promise<void> {
 
     console.log(`[Sync] Starting sync for ${devs.length} developer(s)`);
 
-    // Org-level syncs (run once, not per-developer)
+    // Phase 1: Org-level data
+    emitProgress({
+      syncing: true,
+      scope: "full",
+      completedSteps: 0,
+      totalSteps: 1,
+      activeLabels: ["Syncing Confluence spaces"],
+      phase: "sync",
+    });
+
     await syncConfluenceSpaceList().catch((err) =>
       console.error("[Sync] Confluence space list sync error:", err),
     );
 
+    // Phase 2: Repo-level GitHub data (shared across developers)
+    const repoCount = await syncAllReposOnce();
+    if (repoCount > 0) {
+      emitProgress({
+        syncing: true,
+        scope: "full",
+        completedSteps: 1,
+        totalSteps: 1,
+        activeLabels: [`Synced ${repoCount} GitHub ${repoCount === 1 ? "repo" : "repos"}`],
+        phase: "sync",
+      });
+    }
+
+    // Phase 3: Developer-specific data
     for (let i = 0; i < devs.length; i++) {
       await syncDeveloper(devs[i].id, {
         scope: "full",
@@ -164,6 +194,7 @@ export async function syncAll(): Promise<void> {
       });
     }
 
+    // Phase 4: Cleanup
     emitProgress({
       syncing: true,
       scope: "full",
@@ -183,6 +214,59 @@ export async function syncAll(): Promise<void> {
     _syncing = false;
     resetProgress();
   }
+}
+
+async function syncAllReposOnce(): Promise<number> {
+  const db = getDb();
+  const { getConnection } = await import("../db/connections");
+  const ghConn = getConnection("github");
+  if (!ghConn?.connected || !ghConn.token) return 0;
+
+  // Collect all unique repos across all developers
+  const allSources = db.prepare(
+    "SELECT DISTINCT org, identifier, type FROM data_sources WHERE type = 'github_repo'",
+  ).all() as Array<{ org: string; identifier: string; type: string }>;
+
+  const uniqueRepos = allSources
+    .filter((s) => s.type === "github_repo")
+    .map((s) => ({ org: s.org, name: s.identifier }));
+
+  if (uniqueRepos.length === 0) return 0;
+
+  console.log(`[Sync] Syncing ${uniqueRepos.length} unique GitHub repo(s)`);
+
+  const { syncRepoPRReviewComments, syncRepoPRReviews } = await import("./github-repo-sync");
+
+  let completed = 0;
+
+  // Sync each repo's shared data once
+  for (const repo of uniqueRepos) {
+    const repoName = `${repo.org}/${repo.name}`;
+    
+    emitProgress({
+      syncing: true,
+      scope: "full",
+      completedSteps: completed,
+      totalSteps: uniqueRepos.length,
+      activeLabels: [`Syncing GitHub repo: ${repoName}`],
+      phase: "sync",
+    });
+
+    try {
+      await syncRepoPRReviewComments(ghConn.token, repo);
+    } catch (err) {
+      console.error(`[Sync] Repo ${repoName} PR review comments sync error:`, err);
+    }
+    try {
+      await syncRepoPRReviews(ghConn.token, repo);
+    } catch (err) {
+      console.error(`[Sync] Repo ${repoName} PR reviews sync error:`, err);
+    }
+
+    completed++;
+  }
+
+  return uniqueRepos.length;
 }
 
 export function isSyncing(): boolean {

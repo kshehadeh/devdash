@@ -411,6 +411,65 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_cached_pr_comments_recv_dev_created
     ON cached_pr_comments_received(developer_id, created_at);
   `,
+  // v22 — Repo-level GitHub caches to avoid redundant fetches across developers
+  `
+  CREATE TABLE IF NOT EXISTS repo_sync_log (
+    org TEXT NOT NULL,
+    repo TEXT NOT NULL,
+    data_type TEXT NOT NULL,
+    last_synced_at TEXT NOT NULL,
+    last_cursor TEXT,
+    status TEXT NOT NULL DEFAULT 'ok' CHECK(status IN ('ok', 'error', 'syncing')),
+    error_message TEXT,
+    PRIMARY KEY (org, repo, data_type)
+  );
+
+  CREATE TABLE IF NOT EXISTS cached_repo_pr_review_comments (
+    repo TEXT NOT NULL,
+    comment_id INTEGER NOT NULL,
+    pr_number INTEGER NOT NULL,
+    author_login TEXT NOT NULL,
+    commit_sha TEXT NOT NULL DEFAULT '',
+    path TEXT,
+    body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    url TEXT,
+    PRIMARY KEY (repo, comment_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_cached_repo_pr_review_comments_created
+    ON cached_repo_pr_review_comments(repo, created_at);
+  CREATE INDEX IF NOT EXISTS idx_cached_repo_pr_review_comments_pr
+    ON cached_repo_pr_review_comments(repo, pr_number);
+
+  CREATE TABLE IF NOT EXISTS cached_repo_pr_issue_comments (
+    repo TEXT NOT NULL,
+    comment_id INTEGER NOT NULL,
+    pr_number INTEGER NOT NULL,
+    author_login TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    url TEXT,
+    PRIMARY KEY (repo, comment_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_cached_repo_pr_issue_comments_created
+    ON cached_repo_pr_issue_comments(repo, created_at);
+  CREATE INDEX IF NOT EXISTS idx_cached_repo_pr_issue_comments_pr
+    ON cached_repo_pr_issue_comments(repo, pr_number);
+
+  CREATE TABLE IF NOT EXISTS cached_repo_pr_reviews (
+    repo TEXT NOT NULL,
+    review_id INTEGER NOT NULL,
+    pr_number INTEGER NOT NULL,
+    reviewer_login TEXT NOT NULL,
+    state TEXT NOT NULL,
+    submitted_at TEXT,
+    url TEXT,
+    PRIMARY KEY (repo, review_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_cached_repo_pr_reviews_submitted
+    ON cached_repo_pr_reviews(repo, submitted_at);
+  CREATE INDEX IF NOT EXISTS idx_cached_repo_pr_reviews_pr
+    ON cached_repo_pr_reviews(repo, pr_number);
+  `,
 ];
 
 
