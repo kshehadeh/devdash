@@ -20,7 +20,8 @@
     "retag-release": "bun scripts/retag-release.ts",
     "attach-github-release-notes": "bash scripts/attach-github-release-notes.sh",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "build": {
     "appId": "com.devdash.app",
