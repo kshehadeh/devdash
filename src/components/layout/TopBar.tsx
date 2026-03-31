@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Check, Plus, Pencil, Users } from "lucide-react";
 import { clsx } from "clsx";
 import { FullWindowModal } from "@/components/ui/FullWindowModal";
@@ -21,6 +21,7 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
   const [addOpen, setAddOpen] = useState(false);
   const [bulkAddOpen, setBulkAddOpen] = useState(false);
   const [editDev, setEditDev] = useState<Developer | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selected = developers.find((d) => d.id === selectedId);
   const groupedDevelopers = developers
@@ -37,6 +38,24 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
       acc[team].push(dev);
       return acc;
     }, {});
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
 
   async function handleAdd(values: { name: string; role: string; team: string; isCurrentUser: boolean; githubUsername: string; atlassianEmail: string }) {
     const newDev = await invoke<Developer>("developers:create", values);
@@ -81,7 +100,7 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
           </h1>
         }
         end={
-          <div className="relative ml-1">
+          <div className="relative ml-1" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}

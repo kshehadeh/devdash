@@ -111,6 +111,15 @@ export function Combobox({
   }, []);
 
   useEffect(() => {
+    if (!open) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [open]);
+
+  useEffect(() => {
     if (open && inputRef.current) {
       inputRef.current.focus();
     }

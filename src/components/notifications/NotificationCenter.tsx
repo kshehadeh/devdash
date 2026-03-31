@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@/lib/api";
@@ -13,6 +13,7 @@ export function NotificationCenter() {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<NotificationGroup[]>([]);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { showContextMenu } = useContextMenu();
 
@@ -53,6 +54,24 @@ export function NotificationCenter() {
     };
   }, [load, navigate]);
 
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
   async function markAllRead() {
     await invoke("notifications:mark-all-read");
     void load();
@@ -64,7 +83,7 @@ export function NotificationCenter() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="relative p-2 rounded-md hover:bg-[var(--surface-container-high)] transition-colors text-[var(--on-surface-variant)]"

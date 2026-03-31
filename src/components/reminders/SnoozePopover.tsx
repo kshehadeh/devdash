@@ -47,8 +47,15 @@ export function SnoozePopover({ onSnooze, onClose }: SnoozePopoverProps) {
         onClose();
       }
     }
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleEscape);
+    };
   }, [onClose]);
 
   function handlePresetClick(value: string) {
