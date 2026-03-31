@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import { MIGRATIONS, runMigrations } from "../../db/schema";
 import { createTestDb } from "../helpers/test-db";
 

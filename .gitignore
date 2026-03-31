@@ -15,9 +15,9 @@ dist-electron/
 .env*.local
 
 # Database
-devdash*.db
-devdash*.db-shm
-devdash*.db-wal
+devdash*.db*
+devdash*.db-shm*
+devdash*.db-wal*
 
 # E2E test database
 e2e/test-e2e.db*
