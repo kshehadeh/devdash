@@ -163,9 +163,7 @@ describe("syncPullRequests", () => {
     //
     // fetchReviewRequests is called with a Promise, so call order depends on
     // concurrency, but mock responds to all in the same way using mockImplementation.
-    const mockFetch = vi.fn().mockImplementation((url: string) => {
-      const urlStr = typeof url === "string" ? url : String(url);
-
+    const mockFetch = vi.fn().mockImplementation((_url: string) => {
       // All search endpoints return valid search results
       return Promise.resolve({
         ok: true,
