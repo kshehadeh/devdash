@@ -139,3 +139,11 @@ export function getDb(): Database.Database {
   }
   return _db;
 }
+
+/**
+ * Override the database instance for testing.
+ * Only use in test files — bypasses normal initialization.
+ */
+export function _setDbForTesting(db: Database.Database | null): void {
+  _db = db;
+}

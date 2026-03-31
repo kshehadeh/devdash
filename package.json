@@ -18,7 +18,9 @@
     "release": "bash scripts/version.sh",
     "publish-release": "bun scripts/publish-release.ts",
     "retag-release": "bun scripts/retag-release.ts",
-    "attach-github-release-notes": "bash scripts/attach-github-release-notes.sh"
+    "attach-github-release-notes": "bash scripts/attach-github-release-notes.sh",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "build": {
     "appId": "com.devdash.app",
@@ -88,6 +90,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/inquirer": "^9.0.9",
@@ -102,11 +105,13 @@
     "eslint": "^9",
     "eslint-plugin-react-hooks": "^7.0.1",
     "inquirer": "^13.3.2",
+    "msw": "^2.12.14",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "typescript-eslint": "^8.57.2",
     "vite": "^8.0.1",
+    "vitest": "^4.1.2",
     "wait-on": "^9.0.4"
   },
   "ignoreScripts": [

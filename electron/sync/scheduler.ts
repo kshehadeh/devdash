@@ -7,6 +7,10 @@ let intervalId: ReturnType<typeof setInterval> | null = null;
 let started = false;
 
 export function startSyncScheduler(): void {
+  if (process.env.DEVDASH_DISABLE_SYNC === "1") {
+    console.log("[SyncScheduler] Sync disabled via DEVDASH_DISABLE_SYNC");
+    return;
+  }
   if (started) return;
   started = true;
 
