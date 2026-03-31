@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface ContextMenuContext {
   title: string;
@@ -50,12 +50,25 @@ export async function invoke<T = unknown>(channel: string, ...args: unknown[]): 
   return window.electron.invoke<T>(channel, ...args);
 }
 
+// ---- Sync invalidation wiring ----
+// A pluggable subscribe function injected by AppStatusProvider so useIpc can
+// auto-register for sync-completion soft-refreshes without importing the context.
+type SubscribeFn = (channel: string, callback: () => void) => () => void;
+let _subscribeSyncInvalidation: SubscribeFn | null = null;
+
+/** Called by AppStatusProvider to wire up the invalidation subscription. */
+export function setSyncInvalidationSubscriber(fn: SubscribeFn | null): void {
+  _subscribeSyncInvalidation = fn;
+}
+
 export interface IpcState<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
   /** Re-invoke the channel with the same args (same as initial load). */
   refresh: () => void;
+  /** Re-invoke without setting loading=true — keeps stale data visible while fetching. */
+  softRefresh: () => void;
 }
 
 const noopRefresh = () => {};
@@ -64,7 +77,7 @@ export function useIpc<T>(
   channel: string | null,
   args?: unknown[],
 ): IpcState<T> {
-  const [state, setState] = useState<Omit<IpcState<T>, "refresh">>({ data: null, loading: true, error: null });
+  const [state, setState] = useState<Omit<IpcState<T>, "refresh" | "softRefresh">>({ data: null, loading: true, error: null });
 
   // Serialize args to detect changes
   const argsKey = JSON.stringify(args ?? []);
@@ -78,6 +91,16 @@ export function useIpc<T>(
       .catch((err) => setState({ data: null, loading: false, error: err?.message ?? "IPC call failed" }));
   }, [channel, argsKey]);
 
+  const softRefresh = useCallback(() => {
+    if (!channel) return;
+    const parsed = JSON.parse(argsKey) as unknown[];
+    invoke<T>(channel, ...parsed)
+      .then((data) => setState((prev) => ({ ...prev, data, loading: false })))
+      .catch(() => {
+        /* keep stale data on background refresh failure */
+      });
+  }, [channel, argsKey]);
+
   useEffect(() => {
     if (!channel) {
       setState({ data: null, loading: false, error: null });
@@ -86,5 +109,13 @@ export function useIpc<T>(
     refresh();
   }, [channel, refresh]);
 
-  return { ...state, refresh: channel ? refresh : noopRefresh };
+  // Auto-subscribe to sync invalidation so data refreshes seamlessly after a sync.
+  const softRefreshRef = useRef(softRefresh);
+  softRefreshRef.current = softRefresh;
+  useEffect(() => {
+    if (!channel || !_subscribeSyncInvalidation) return;
+    return _subscribeSyncInvalidation(channel, () => softRefreshRef.current());
+  }, [channel]);
+
+  return { ...state, refresh: channel ? refresh : noopRefresh, softRefresh: channel ? softRefresh : noopRefresh };
 }

@@ -226,6 +226,8 @@ export interface SyncProgressPayload {
   totalSteps: number;
   activeLabels: string[];
   phase: "sync" | "prune";
+  /** Present on the final idle broadcast — lists data categories that were synced. */
+  completedCategories?: string[];
 }
 
 export interface SyncStatusDeveloper {

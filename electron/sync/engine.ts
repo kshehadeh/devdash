@@ -7,6 +7,8 @@ import { broadcastSyncProgress, type SyncProgressPayload } from "./progress-broa
 let _syncing = false;
 /** Non-silent syncDeveloper calls in flight (manual / full sync tasks). */
 let _foregroundSyncDepth = 0;
+/** Categories synced in the current foreground run — accumulated across chained syncDeveloper calls. */
+let _syncedCategories = new Set<string>();
 
 function idleProgress(): SyncProgressPayload {
   let n = 1;
@@ -47,8 +49,8 @@ function emitProgress(patch: Partial<SyncProgressPayload>) {
   broadcastSyncProgress(_progress);
 }
 
-function resetProgress() {
-  _progress = idleProgress();
+function resetProgress(completedCategories?: string[]) {
+  _progress = { ...idleProgress(), completedCategories };
   broadcastSyncProgress(_progress);
 }
 
@@ -81,6 +83,9 @@ export async function syncDeveloper(developerId: string, opts: SyncDeveloperOpti
     label: s.label,
     fn: () => s.run(developerId),
   }));
+
+  // Track which data categories are being synced
+  for (const s of specs) _syncedCategories.add(s.category);
 
   if (silent) {
     const results = await Promise.allSettled(TASKS.map((t) => t.fn()));
@@ -133,7 +138,9 @@ export async function syncDeveloper(developerId: string, opts: SyncDeveloperOpti
   } finally {
     _foregroundSyncDepth--;
     if (_foregroundSyncDepth === 0 && !_syncing) {
-      resetProgress();
+      const cats = [..._syncedCategories];
+      _syncedCategories = new Set();
+      resetProgress(cats);
     }
   }
 }
@@ -212,7 +219,9 @@ export async function syncAll(): Promise<void> {
     console.log("[Sync] All syncs complete");
   } finally {
     _syncing = false;
-    resetProgress();
+    const cats = [..._syncedCategories];
+    _syncedCategories = new Set();
+    resetProgress(cats);
   }
 }
 

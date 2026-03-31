@@ -8,6 +8,7 @@ import type { CodeProviderId, DocsProviderId, WorkProviderId } from "./types";
 export interface RegisteredSyncTask {
   id: string;
   label: string;
+  category: IntegrationCategory;
   run: (developerId: string) => Promise<void>;
 }
 
@@ -78,5 +79,5 @@ export function getRegisteredSyncTasks(): RegisteredSyncTask[] {
     if (t.category === "work") return t.provider === s.work;
     if (t.category === "docs") return t.provider === s.docs;
     return false;
-  }).map(({ id, label, run }) => ({ id, label, run }));
+  }).map(({ id, label, category, run }) => ({ id, label, category, run }));
 }
