@@ -83,13 +83,16 @@ function openDatabaseAndMigrate(): void {
 export function ensureDatabaseReady(): void {
   const dbPath = getDbPath();
   const userData = app.getPath("userData");
+  const MAX_RETRIES = 3;
+  let attempts = 0;
 
   for (;;) {
     try {
       openDatabaseAndMigrate();
       return;
     } catch (err) {
-      console.error("[DB] Failed to open or migrate:", err);
+      attempts++;
+      console.error(`[DB] Failed to open or migrate (attempt ${attempts}/${MAX_RETRIES}):`, err);
       const isMigration = err instanceof MigrationFailedError;
       const detail =
         process.env.NODE_ENV === "development"
@@ -97,6 +100,22 @@ export function ensureDatabaseReady(): void {
           : err instanceof Error
             ? err.message
             : String(err);
+
+      if (attempts >= MAX_RETRIES) {
+        dialog.showMessageBoxSync({
+          type: "error",
+          title: "DevDash database problem",
+          message:
+            "DevDash was unable to open its database after multiple attempts. " +
+            "The app will now quit. Please check the error details and try reinstalling if the problem persists.",
+          detail,
+          buttons: ["Quit"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        app.quit();
+        process.exit(1);
+      }
 
       const choice = dialog.showMessageBoxSync({
         type: "error",
