@@ -23,6 +23,20 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
   const [editDev, setEditDev] = useState<Developer | null>(null);
 
   const selected = developers.find((d) => d.id === selectedId);
+  const groupedDevelopers = developers
+    .slice()
+    .sort((a, b) => {
+      const teamA = (a.team || "Unassigned").toLowerCase();
+      const teamB = (b.team || "Unassigned").toLowerCase();
+      if (teamA !== teamB) return teamA.localeCompare(teamB);
+      return a.name.localeCompare(b.name);
+    })
+    .reduce<Record<string, Developer[]>>((acc, dev) => {
+      const team = dev.team?.trim() || "Unassigned";
+      if (!acc[team]) acc[team] = [];
+      acc[team].push(dev);
+      return acc;
+    }, {});
 
   async function handleAdd(values: { name: string; role: string; team: string; isCurrentUser: boolean; githubUsername: string; atlassianEmail: string }) {
     const newDev = await invoke<Developer>("developers:create", values);
@@ -94,43 +108,52 @@ export function TopBar({ developers, selectedId, onSelect, onDevelopersChange, t
             </button>
 
             {open && (
-              <div className="absolute right-0 top-full mt-1 w-64 bg-[var(--surface-container-highest)] rounded-md shadow-lg overflow-hidden">
-                {developers.map((dev) => (
-                  <div
-                    key={dev.id}
-                    className="flex items-center gap-2 px-3 py-2.5 hover:bg-[var(--surface-bright)] transition-colors group"
-                  >
-                    <button
-                      onClick={() => { onSelect(dev.id); setOpen(false); }}
-                      className="flex items-center gap-3 flex-1 text-left min-w-0"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-[var(--primary-container)] flex items-center justify-center text-[10px] font-bold text-[var(--on-primary)] font-label shrink-0">
-                        {dev.avatar}
+              <div className="absolute right-0 top-full mt-1 w-72 bg-[var(--surface-container-highest)] rounded-md shadow-lg overflow-hidden">
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {Object.entries(groupedDevelopers).map(([team, teamDevelopers]) => (
+                    <div key={team} className="py-1">
+                      <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-widest text-[var(--on-surface-variant)] font-label">
+                        {team}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-[var(--on-surface)] truncate flex items-center gap-1.5">
-                          <span className="truncate">{dev.name}</span>
-                          {dev.isCurrentUser && (
-                            <span className="text-[9px] font-label tracking-wide px-1.5 py-0.5 rounded bg-[var(--primary)]/15 text-[var(--primary)] shrink-0">
-                              YOU
-                            </span>
-                          )}
+                      {teamDevelopers.map((dev) => (
+                        <div
+                          key={dev.id}
+                          className="flex items-center gap-2 px-3 py-2.5 hover:bg-[var(--surface-bright)] transition-colors group"
+                        >
+                          <button
+                            onClick={() => { onSelect(dev.id); setOpen(false); }}
+                            className="flex items-center gap-3 flex-1 text-left min-w-0"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-[var(--primary-container)] flex items-center justify-center text-[10px] font-bold text-[var(--on-primary)] font-label shrink-0">
+                              {dev.avatar}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-[var(--on-surface)] truncate flex items-center gap-1.5">
+                                <span className="truncate">{dev.name}</span>
+                                {dev.isCurrentUser && (
+                                  <span className="text-[9px] font-label tracking-wide px-1.5 py-0.5 rounded bg-[var(--primary)]/15 text-[var(--primary)] shrink-0">
+                                    YOU
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-[var(--on-surface-variant)] truncate">{dev.role}</div>
+                            </div>
+                            {dev.id === selectedId && (
+                              <Check size={14} className="text-[var(--primary)] shrink-0" />
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditDev(dev); setOpen(false); }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--surface-container-highest)] text-[var(--on-surface-variant)]"
+                            title="Edit developer"
+                          >
+                            <Pencil size={12} />
+                          </button>
                         </div>
-                        <div className="text-xs text-[var(--on-surface-variant)] truncate">{dev.role}</div>
-                      </div>
-                      {dev.id === selectedId && (
-                        <Check size={14} className="text-[var(--primary)] shrink-0" />
-                      )}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEditDev(dev); setOpen(false); }}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--surface-container-highest)] text-[var(--on-surface-variant)]"
-                      title="Edit developer"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                  </div>
-                ))}
+                      ))}
+                    </div>
+                  ))}
+                </div>
 
                 <div className="border-t border-[var(--outline-variant)]/20 p-2 flex flex-col gap-0.5">
                   <button
