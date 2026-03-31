@@ -4,7 +4,7 @@
   "private": true,
   "main": "electron/dist/main.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && bun run electron:compile && bun run electron:launch\"",
+    "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && bun run electron:compile && bun run electron:rebuild && bun run electron:launch\"",
     "electron:launch": "bun scripts/launch-electron.ts",
     "build": "vite build",
     "lint": "eslint",
@@ -19,8 +19,8 @@
     "publish-release": "bun scripts/publish-release.ts",
     "retag-release": "bun scripts/retag-release.ts",
     "attach-github-release-notes": "bash scripts/attach-github-release-notes.sh",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "npm rebuild better-sqlite3 --quiet && vitest run",
+    "test:watch": "npm rebuild better-sqlite3 --quiet && vitest",
     "test:e2e": "playwright test"
   },
   "build": {
