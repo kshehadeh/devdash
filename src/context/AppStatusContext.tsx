@@ -14,6 +14,7 @@ import { invoke, setSyncInvalidationSubscriber } from "@/lib/api";
 import type {
   AppNotification,
   AppNotificationType,
+  ToastItem,
   SyncProgressPayload,
   SyncStatusResponse,
 } from "@/lib/types";
@@ -75,6 +76,9 @@ interface AppStatusContextValue {
   notifications: AppNotification[];
   pushNotification: (n: { message: string; type?: AppNotificationType; ttlMs?: number }) => void;
   dismissNotification: (id: string) => void;
+  toasts: ToastItem[];
+  pushToast: (n: { message: string; type?: AppNotificationType; ttlMs?: number }) => void;
+  dismissToast: (id: string) => void;
   refreshSyncStatus: () => Promise<void>;
   /** Register an IPC channel to be soft-refreshed when its data category completes syncing. Returns unsubscribe fn. */
   subscribeSyncInvalidation: (channel: string, callback: SyncInvalidationCallback) => () => void;
@@ -87,6 +91,7 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   // ---- Sync invalidation subscriptions ----
   // Map of IPC channel → Set of callbacks to fire on sync completion.
@@ -193,6 +198,35 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
     setNotifications((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
+  const pushToast = useCallback(
+    (n: { message: string; type?: AppNotificationType; ttlMs?: number }) => {
+      const id = crypto.randomUUID();
+      const type: AppNotificationType = n.type ?? "info";
+      const ttl = n.ttlMs ?? 5000;
+      setToasts((prev) => [...prev, { id, message: n.message, type, createdAt: Date.now() }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((x) => x.id !== id));
+      }, ttl);
+    },
+    [],
+  );
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  // Listen for sync warnings and display as floating toast notifications
+  useEffect(() => {
+    const off = window.electron.onSyncWarning((payload) => {
+      pushToast({
+        message: payload.message,
+        type: "warning",
+        ttlMs: 5000,
+      });
+    });
+    return off;
+  }, [pushToast]);
+
   const syncing = progress.syncing;
 
   const value = useMemo(
@@ -204,10 +238,13 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
       notifications,
       pushNotification,
       dismissNotification,
+      toasts,
+      pushToast,
+      dismissToast,
       refreshSyncStatus: fetchSyncStatus,
       subscribeSyncInvalidation,
     }),
-    [syncing, progress, lastSyncedAt, online, notifications, pushNotification, dismissNotification, fetchSyncStatus, subscribeSyncInvalidation],
+    [syncing, progress, lastSyncedAt, online, notifications, pushNotification, dismissNotification, toasts, pushToast, dismissToast, fetchSyncStatus, subscribeSyncInvalidation],
   );
 
   return <AppStatusContext.Provider value={value}>{children}</AppStatusContext.Provider>;

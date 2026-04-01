@@ -16,10 +16,23 @@ export interface SyncProgressPayload {
   completedCategories?: string[];
 }
 
+export interface SyncWarningPayload {
+  provider: "github" | "atlassian" | "linear";
+  message: string;
+}
+
 export function broadcastSyncProgress(payload: SyncProgressPayload): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send("sync:progress", payload);
+    }
+  }
+}
+
+export function broadcastSyncWarning(payload: SyncWarningPayload): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("sync:warning", payload);
     }
   }
 }

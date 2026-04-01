@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.removeListener("sync:progress", handler);
     };
   },
+  onSyncWarning: (callback: (payload: { provider: "github" | "atlassian" | "linear"; message: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { provider: "github" | "atlassian" | "linear"; message: string }) => callback(payload);
+    ipcRenderer.on("sync:warning", handler);
+    return () => {
+      ipcRenderer.removeListener("sync:warning", handler);
+    };
+  },
   onNetworkStatus: (callback: (payload: { online: boolean }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: { online: boolean }) => callback(payload);
     ipcRenderer.on("network:status", handler);

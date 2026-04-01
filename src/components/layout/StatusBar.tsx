@@ -30,12 +30,15 @@ function syncMessage(progress: SyncProgressPayload): string {
   if (progress.developerName) {
     return `Syncing ${progress.developerName}`;
   }
-  return "Syncing data…";
+  // No developer context: org-level or repo-level phase — use the active label directly
+  return progress.activeLabels[0] ?? "Syncing data…";
 }
 
 function activeDetail(progress: SyncProgressPayload): string | null {
   if (progress.phase === "prune") return null;
   if (progress.activeLabels.length === 0) return null;
+  // When the primary message IS the label (no developer context), don't duplicate it as detail
+  if (!progress.developerName) return null;
   return progress.activeLabels.join(" · ");
 }
 

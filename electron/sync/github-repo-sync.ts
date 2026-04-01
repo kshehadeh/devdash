@@ -2,6 +2,10 @@
 import { getDb } from "../db/index";
 
 const GITHUB_API = "https://api.github.com";
+const GITHUB_GRAPHQL = "https://api.github.com/graphql";
+
+/** Maximum PRs per GraphQL batch. 25 PRs × 50 reviews = 1250 nodes, well under the 5000 limit. */
+const REVIEWS_BATCH_SIZE = 25;
 
 function headers(token: string) {
   return {
@@ -46,6 +50,91 @@ function setRepoSyncStatus(
         error_message = excluded.error_message
     `).run(org, repo, dataType, status, errorMessage ?? null);
   }
+}
+
+/** Returns true if the repo data type was successfully synced within the given age window. */
+export function isRepoSyncFresh(org: string, repo: string, dataType: string, maxAgeMs: number): boolean {
+  const db = getDb();
+  const row = db.prepare(
+    "SELECT last_synced_at, status FROM repo_sync_log WHERE org = ? AND repo = ? AND data_type = ?",
+  ).get(org, repo, dataType) as { last_synced_at: string; status: string } | undefined;
+  if (!row || row.status !== "ok") return false;
+  return Date.now() - new Date(row.last_synced_at).getTime() < maxAgeMs;
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
+interface GraphQLReview {
+  id: number;
+  reviewer_login: string;
+  state: string;
+  submitted_at: string;
+  url: string | null;
+}
+
+/**
+ * Batch-fetches PR reviews via GraphQL for up to REVIEWS_BATCH_SIZE PRs per request,
+ * replacing the previous N+1 REST pattern (one /pulls/{n}/reviews call per PR).
+ */
+async function batchFetchPRReviewsGraphQL(
+  token: string,
+  owner: string,
+  repoName: string,
+  prNumbers: number[],
+): Promise<Map<number, GraphQLReview[]>> {
+  const results = new Map<number, GraphQLReview[]>();
+  if (prNumbers.length === 0) return results;
+
+  for (const chunk of chunkArray(prNumbers, REVIEWS_BATCH_SIZE)) {
+    const fields = chunk
+      .map(
+        (n) =>
+          `    pr_${n}: pullRequest(number: ${n}) {
+      reviews(first: 50) { nodes { databaseId state submittedAt url author { login } } }
+    }`,
+      )
+      .join("\n");
+
+    const query = `query { repository(owner: "${owner}", name: "${repoName}") {\n${fields}\n} }`;
+
+    try {
+      const res = await fetch(GITHUB_GRAPHQL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const repoData = data.data?.repository;
+      if (!repoData) continue;
+
+      for (const n of chunk) {
+        const prData = repoData[`pr_${n}`];
+        if (!prData?.reviews?.nodes) continue;
+        results.set(
+          n,
+          prData.reviews.nodes
+            .filter((r: any) => r.author?.login && r.databaseId)
+            .map((r: any) => ({
+              id: r.databaseId,
+              reviewer_login: r.author.login,
+              state: r.state,
+              submitted_at: r.submittedAt || "",
+              url: r.url || null,
+            })),
+        );
+      }
+    } catch (err) {
+      console.error(`[Sync] GraphQL batch reviews error for ${owner}/${repoName}:`, err);
+    }
+  }
+
+  return results;
 }
 
 const ISSUE_URL_RE = /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)$/;
@@ -317,7 +406,8 @@ export async function syncRepoPRReviews(token: string, repo: RepoKey): Promise<v
 
     let latestUpdated = `${since}T00:00:00Z`;
 
-    // Search for PRs updated since cursor
+    // Phase 1: Collect all PR numbers updated since cursor (paginated search)
+    const allPRItems: Array<{ number: number; updated_at: string }> = [];
     let page = 1;
     let hasMore = true;
 
@@ -328,49 +418,33 @@ export async function syncRepoPRReviews(token: string, repo: RepoKey): Promise<v
       if (!res.ok) break;
 
       const data = await res.json();
-      const items: Array<{
-        number: number;
-        updated_at: string;
-        repository_url: string;
-      }> = data.items ?? [];
+      const items: Array<{ number: number; updated_at: string }> = data.items ?? [];
       if (items.length === 0) break;
 
-      for (const item of items) {
-        if (item.updated_at > latestUpdated) latestUpdated = item.updated_at;
-
-        try {
-          const revRes = await fetch(
-            `${GITHUB_API}/repos/${rp}/pulls/${item.number}/reviews`,
-            { headers: headers(token) },
-          );
-          if (!revRes.ok) continue;
-          const revs = await revRes.json() as Array<{
-            id: number;
-            state: string;
-            submitted_at?: string | null;
-            html_url?: string | null;
-            user?: { login: string } | null;
-          }>;
-          if (!Array.isArray(revs)) continue;
-          for (const r of revs) {
-            if (!r.user?.login || r.id == null) continue;
-            const submittedAt = r.submitted_at || item.updated_at;
-            reviews.push({
-              id: r.id,
-              pr_number: item.number,
-              reviewer_login: r.user.login,
-              state: r.state,
-              submitted_at: submittedAt,
-              url: r.html_url ?? null,
-            });
-          }
-        } catch {
-          /* ignore per-PR review fetch errors */
-        }
-      }
-
+      allPRItems.push(...items);
       hasMore = items.length === 100 && page < 10;
       page++;
+    }
+
+    for (const item of allPRItems) {
+      if (item.updated_at > latestUpdated) latestUpdated = item.updated_at;
+    }
+
+    // Phase 2: Batch-fetch reviews via GraphQL (replaces N+1 REST calls)
+    const prNumbers = allPRItems.map((item) => item.number);
+    const reviewsByPR = await batchFetchPRReviewsGraphQL(token, repo.org, repo.name, prNumbers);
+
+    for (const [prNumber, prReviews] of reviewsByPR) {
+      for (const r of prReviews) {
+        reviews.push({
+          id: r.id,
+          pr_number: prNumber,
+          reviewer_login: r.reviewer_login,
+          state: r.state,
+          submitted_at: r.submitted_at,
+          url: r.url,
+        });
+      }
     }
 
     const upsertReview = db.prepare(`

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation, Outlet } from "react-router-dom";
 import { AppStatusProvider } from "./context/AppStatusContext";
+import { ToastContainer } from "./components/ui/Toast";
 import { UpdateProvider } from "./context/UpdateContext";
 import { SelectedDeveloperProvider } from "./context/SelectedDeveloperContext";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -159,6 +160,7 @@ export default function App() {
         <div className="flex h-full min-h-0 w-full flex-1 flex-col">
           <RoutedApp />
         </div>
+        <ToastContainer />
       </UpdateProvider>
     </AppStatusProvider>
   );

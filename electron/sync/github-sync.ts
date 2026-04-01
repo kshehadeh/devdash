@@ -11,6 +11,18 @@ import {
 
 const GITHUB_API = "https://api.github.com";
 
+/** Contributions change at most a few times per day; no need to re-fetch every 15 min. */
+const CONTRIBUTION_SYNC_MIN_AGE_MS = 60 * 60 * 1000; // 1 hour
+
+function isDevSyncFresh(developerId: string, dataType: string, maxAgeMs: number): boolean {
+  const db = getDb();
+  const row = db.prepare(
+    "SELECT last_synced_at, status FROM sync_log WHERE developer_id = ? AND data_type = ?",
+  ).get(developerId, dataType) as { last_synced_at: string; status: string } | undefined;
+  if (!row || row.status !== "ok") return false;
+  return Date.now() - new Date(row.last_synced_at).getTime() < maxAgeMs;
+}
+
 function headers(token: string) {
   return {
     Authorization: `Bearer ${token}`,
@@ -50,6 +62,11 @@ export async function syncContributions(developerId: string): Promise<void> {
   const dev = getDeveloper(developerId);
   const ghConn = getConnection("github");
   if (!dev?.githubUsername || !hasUsableToken(ghConn)) return;
+
+  if (isDevSyncFresh(developerId, "github_contributions", CONTRIBUTION_SYNC_MIN_AGE_MS)) {
+    console.log(`[Sync] Skipping contributions sync for ${developerId} — data is fresh (<1h old)`);
+    return;
+  }
 
   setSyncStatus(developerId, "github_contributions", "syncing");
 
@@ -144,19 +161,32 @@ export async function syncPullRequests(developerId: string): Promise<void> {
 
     const incrementalPrepared = allPRs.map((pr) => preparePullForCache(pr));
 
-    // Refresh open PR review signals every sync (incremental query can miss idle open PRs)
-    const openQ = `type:pr is:open author:${username}${repoFilter} sort:updated-desc`.trim();
-    const openUrl = `${GITHUB_API}/search/issues?q=${encodeURIComponent(openQ)}&per_page=30`;
-    const openRes = await fetch(openUrl, { headers: headers(token) });
-    const openItems: SearchPRItem[] = openRes.ok ? ((await openRes.json()).items ?? []) : [];
-    const openPrepared = openItems.map((pr) => preparePullForCache(pr));
+    // On the first sync (no prior cursor), also fetch open PRs explicitly to cover any that
+    // haven't been recently updated and would be missed by the incremental query.
+    // On subsequent syncs the incremental query already covers all recently-touched PRs,
+    // and idle open PRs retain accurate cached data (their metadata only changes on update).
+    const openPrepared: ReturnType<typeof preparePullForCache>[] = [];
+    if (!syncLog?.last_cursor) {
+      const openQ = `type:pr is:open author:${username}${repoFilter} sort:updated-desc`.trim();
+      const openUrl = `${GITHUB_API}/search/issues?q=${encodeURIComponent(openQ)}&per_page=30`;
+      const openRes = await fetch(openUrl, { headers: headers(token) });
+      const openItems: SearchPRItem[] = openRes.ok ? ((await openRes.json()).items ?? []) : [];
+      openPrepared.push(...openItems.map((pr) => preparePullForCache(pr)));
+    }
 
     const reviewQueue = await reviewQueuePromise;
 
     const upsert = db.prepare(`
-      INSERT OR REPLACE INTO cached_pull_requests
+      INSERT INTO cached_pull_requests
         (developer_id, pr_number, repo, title, status, review_count, created_at, updated_at, merged_at, latest_review_state, pending_reviewers_json, first_review_submitted_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, NULL)
+      ON CONFLICT(developer_id, pr_number, repo) DO UPDATE SET
+        title = excluded.title,
+        status = excluded.status,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
+        merged_at = excluded.merged_at,
+        pending_reviewers_json = excluded.pending_reviewers_json
     `);
 
     const insertReviewReq = db.prepare(`
@@ -175,20 +205,16 @@ export async function syncPullRequests(developerId: string): Promise<void> {
         if (mergedAt) status = "merged";
         else if (pr.state === "closed") status = "closed";
 
-        // Review data will be populated from repo-level cache during distribution
         upsert.run(
           developerId,
           pr.number,
           e.repoPath,
           pr.title,
           status,
-          0,  // reviewCount - will be updated from repo cache
           pr.created_at,
           pr.updated_at,
           mergedAt,
-          null,  // latestState - will be updated from repo cache
           e.pendingJson,
-          null,  // firstReviewSubmittedAt - will be updated from repo cache
         );
 
         if (pr.updated_at > latestUpdated) latestUpdated = pr.updated_at;

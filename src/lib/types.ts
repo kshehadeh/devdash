@@ -257,6 +257,13 @@ export interface AppNotification {
   createdAt: number;
 }
 
+export interface ToastItem {
+  id: string;
+  message: string;
+  type: AppNotificationType;
+  createdAt: number;
+}
+
 // ---------- App updates ----------
 
 export type UpdateCheckResponse =

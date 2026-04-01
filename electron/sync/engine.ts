@@ -2,7 +2,14 @@ import { isNetworkOnline } from "../network-monitor";
 import { getDb } from "../db/index";
 import { getRegisteredSyncTasks } from "../integrations/sync-registry";
 import { syncConfluenceSpaceList } from "./atlassian-sync";
-import { broadcastSyncProgress, type SyncProgressPayload } from "./progress-broadcast";
+import { broadcastSyncProgress, broadcastSyncWarning, type SyncProgressPayload } from "./progress-broadcast";
+import { getConnection, hasUsableToken } from "../db/connections";
+import { getIntegrationSettings } from "../db/integration-settings";
+
+/** How old repo-level sync data must be before re-syncing (10 min). */
+const REPO_SYNC_MIN_AGE_MS = 10 * 60 * 1000;
+/** Max number of repos synced in parallel. */
+const REPO_SYNC_CONCURRENCY = 3;
 
 let _syncing = false;
 /** Non-silent syncDeveloper calls in flight (manual / full sync tasks). */
@@ -67,9 +74,9 @@ export async function syncDeveloper(developerId: string, opts: SyncDeveloperOpti
 
   if (!isNetworkOnline()) return;
 
-  // For single-developer syncs, run repo-level sync first to ensure review data is fresh
+  // For single-developer syncs, run repo-level sync scoped to this developer's repos only
   if (scope === "single" && !silent) {
-    await syncAllReposOnce().catch((err) =>
+    await syncReposForDeveloper(developerId).catch((err) =>
       console.error("[Sync] Repo-level GitHub sync error (single dev):", err),
     );
   }
@@ -162,6 +169,30 @@ export async function syncAll(): Promise<void> {
       return;
     }
 
+    // Check connections and warn if selected integrations are missing tokens
+    const settings = getIntegrationSettings();
+
+    if (settings.code === "github") {
+      const ghConn = getConnection("github");
+      if (!hasUsableToken(ghConn)) {
+        broadcastSyncWarning({ provider: "github", message: "GitHub not connected — sync will skip code data" });
+      }
+    }
+
+    if (settings.work === "jira" || settings.docs === "confluence") {
+      const atConn = getConnection("atlassian");
+      if (!atConn?.connected || !atConn.token) {
+        broadcastSyncWarning({ provider: "atlassian", message: "Atlassian not connected — sync will skip work/docs data" });
+      }
+    }
+
+    if (settings.work === "linear") {
+      const linearConn = getConnection("linear");
+      if (!linearConn?.connected || !linearConn.token) {
+        broadcastSyncWarning({ provider: "linear", message: "Linear not connected — sync will skip work data" });
+      }
+    }
+
     console.log(`[Sync] Starting sync for ${devs.length} developer(s)`);
 
     // Phase 1: Org-level data
@@ -225,57 +256,115 @@ export async function syncAll(): Promise<void> {
   }
 }
 
+/** Runs up to `limit` async tasks concurrently, similar to Promise.allSettled but bounded. */
+async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < tasks.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await tasks[i]() };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
+}
+
+/**
+ * Syncs repo-level GitHub data (review comments + PR reviews) for the given repos,
+ * processing up to REPO_SYNC_CONCURRENCY repos in parallel and skipping repos
+ * whose data was successfully synced within REPO_SYNC_MIN_AGE_MS.
+ */
+async function syncRepos(
+  token: string,
+  repos: Array<{ org: string; name: string }>,
+  scope: "full" | "single" = "single",
+): Promise<number> {
+  if (repos.length === 0) return 0;
+
+  const { syncRepoPRReviewComments, syncRepoPRReviews, isRepoSyncFresh } = await import("./github-repo-sync");
+  let completed = 0;
+
+  const tasks = repos.map((repo) => async () => {
+    const repoName = `${repo.org}/${repo.name}`;
+
+    emitProgress({
+      syncing: true,
+      scope,
+      completedSteps: completed,
+      totalSteps: repos.length,
+      activeLabels: [`Syncing GitHub repo: ${repoName}`],
+      phase: "sync",
+    });
+
+    const commentsFresh = isRepoSyncFresh(repo.org, repo.name, "pr_review_comments", REPO_SYNC_MIN_AGE_MS);
+    const reviewsFresh = isRepoSyncFresh(repo.org, repo.name, "pr_reviews", REPO_SYNC_MIN_AGE_MS);
+
+    if (!commentsFresh) {
+      try {
+        await syncRepoPRReviewComments(token, repo);
+      } catch (err) {
+        console.error(`[Sync] Repo ${repoName} PR review comments sync error:`, err);
+      }
+    } else {
+      console.log(`[Sync] Repo ${repoName} PR review comments are fresh, skipping`);
+    }
+
+    if (!reviewsFresh) {
+      try {
+        await syncRepoPRReviews(token, repo);
+      } catch (err) {
+        console.error(`[Sync] Repo ${repoName} PR reviews sync error:`, err);
+      }
+    } else {
+      console.log(`[Sync] Repo ${repoName} PR reviews are fresh, skipping`);
+    }
+
+    completed++;
+  });
+
+  await withConcurrency(tasks, REPO_SYNC_CONCURRENCY);
+  return repos.length;
+}
+
 async function syncAllReposOnce(): Promise<number> {
   const db = getDb();
   const { getConnection } = await import("../db/connections");
   const ghConn = getConnection("github");
   if (!ghConn?.connected || !ghConn.token) return 0;
 
-  // Collect all unique repos across all developers
   const allSources = db.prepare(
-    "SELECT DISTINCT org, identifier, type FROM data_sources WHERE type = 'github_repo'",
-  ).all() as Array<{ org: string; identifier: string; type: string }>;
+    "SELECT DISTINCT org, identifier FROM data_sources WHERE type = 'github_repo'",
+  ).all() as Array<{ org: string; identifier: string }>;
 
-  const uniqueRepos = allSources
-    .filter((s) => s.type === "github_repo")
-    .map((s) => ({ org: s.org, name: s.identifier }));
-
+  const uniqueRepos = allSources.map((s) => ({ org: s.org, name: s.identifier }));
   if (uniqueRepos.length === 0) return 0;
 
   console.log(`[Sync] Syncing ${uniqueRepos.length} unique GitHub repo(s)`);
+  return syncRepos(ghConn.token, uniqueRepos, "full");
+}
 
-  const { syncRepoPRReviewComments, syncRepoPRReviews } = await import("./github-repo-sync");
+/** Syncs repo-level data scoped only to the given developer's assigned repos. */
+async function syncReposForDeveloper(developerId: string): Promise<number> {
+  const { getConnection } = await import("../db/connections");
+  const ghConn = getConnection("github");
+  if (!ghConn?.connected || !ghConn.token) return 0;
 
-  let completed = 0;
+  const { getSourcesForDeveloper } = await import("../db/sources");
+  const repos = getSourcesForDeveloper(developerId)
+    .filter((s) => s.type === "github_repo")
+    .map((s) => ({ org: s.org, name: s.identifier }));
 
-  // Sync each repo's shared data once
-  for (const repo of uniqueRepos) {
-    const repoName = `${repo.org}/${repo.name}`;
-    
-    emitProgress({
-      syncing: true,
-      scope: "full",
-      completedSteps: completed,
-      totalSteps: uniqueRepos.length,
-      activeLabels: [`Syncing GitHub repo: ${repoName}`],
-      phase: "sync",
-    });
+  if (repos.length === 0) return 0;
 
-    try {
-      await syncRepoPRReviewComments(ghConn.token, repo);
-    } catch (err) {
-      console.error(`[Sync] Repo ${repoName} PR review comments sync error:`, err);
-    }
-    try {
-      await syncRepoPRReviews(ghConn.token, repo);
-    } catch (err) {
-      console.error(`[Sync] Repo ${repoName} PR reviews sync error:`, err);
-    }
-
-    completed++;
-  }
-
-  return uniqueRepos.length;
+  console.log(`[Sync] Syncing ${repos.length} repo(s) for developer ${developerId}`);
+  return syncRepos(ghConn.token, repos, "single");
 }
 
 export function isSyncing(): boolean {
