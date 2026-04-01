@@ -33,6 +33,7 @@ export default function ConnectionsPage() {
 
   const [showGhToken, setShowGhToken] = useState(false);
   const [ghToken, setGhToken] = useState("");
+  const [showAtToken, setShowAtToken] = useState(false);
   const [ghSaving, setGhSaving] = useState(false);
   const [ghMsg, setGhMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -466,13 +467,22 @@ export default function ConnectionsPage() {
                   <label className="block text-xs font-label text-[var(--on-surface-variant)] uppercase tracking-wider mb-2">
                     API token
                   </label>
-                  <input
-                    type="password"
-                    value={atToken}
-                    onChange={(e) => setAtToken(e.target.value)}
-                    placeholder="Atlassian API token"
-                    className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)] font-mono"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showAtToken ? "text" : "password"}
+                      value={atToken}
+                      onChange={(e) => setAtToken(e.target.value)}
+                      placeholder="Atlassian API token"
+                      className="w-full bg-[var(--surface-container-lowest)] text-[var(--on-surface)] text-sm rounded-md px-3 py-2.5 pr-10 outline-none focus:ring-1 focus:ring-[var(--primary)] placeholder:text-[var(--outline)] font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAtToken((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] transition-colors"
+                    >
+                      {showAtToken ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
                 </div>
               </div>
 

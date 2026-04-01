@@ -20,7 +20,12 @@ export function registerConnectionHandlers() {
   ipcMain.handle("connections:upsert", (_e, data: { id: string; token?: string; email?: string; org?: string; connected?: boolean }) => {
     const { id, token, email, org, connected } = data;
     if (id !== "github" && id !== "atlassian" && id !== "linear") throw new Error("Invalid connection id");
-    const tokenToSave = token && !token.startsWith("••") ? token : undefined;
+    // null = explicitly clear the token; undefined = masked placeholder, keep existing; string = new token
+    const tokenToSave: string | null | undefined =
+      token === undefined || token === null ? undefined
+      : token === "" ? null
+      : token.startsWith("••") ? undefined
+      : token;
     const conn = saveConnection(id as ConnectionId, { token: tokenToSave, email, org, connected });
     return mask(conn);
   });

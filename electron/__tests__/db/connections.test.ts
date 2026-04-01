@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  _setDbForTesting(null as unknown as Database.Database);
+  _setDbForTesting(null);
   db.close();
 });
 

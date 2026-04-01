@@ -89,17 +89,22 @@ export function listConnections(): ConnectionRecord[] {
 
 export function saveConnection(
   id: ConnectionId,
-  input: { token?: string; email?: string; org?: string; connected?: boolean }
+  input: { token?: string | null; email?: string; org?: string; connected?: boolean }
 ): ConnectionRecord {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM connections WHERE id = ?").get(id) as DbRow | undefined;
 
-  const encryptedToken = input.token
-    ? encrypt(input.token)
+  // null = clear the token, undefined = keep existing, string = new token
+  const encryptedToken =
+    input.token === null ? null
+    : input.token ? encrypt(input.token)
     : existing?.encrypted_token ?? null;
 
+  // Force disconnected if the token was explicitly cleared
   const connected =
-    input.connected !== undefined ? (input.connected ? 1 : 0) : (existing?.connected ? 1 : 0);
+    input.token === null ? 0
+    : input.connected !== undefined ? (input.connected ? 1 : 0)
+    : (existing?.connected ? 1 : 0);
 
   db.prepare(
     `INSERT INTO connections (id, encrypted_token, email, org, connected, updated_at)
