@@ -29,7 +29,7 @@ export function FullWindowModal({ open, onClose, title, description, children }:
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col min-h-0"
+      className="fixed inset-0 top-14 z-50 flex flex-col min-h-0"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
