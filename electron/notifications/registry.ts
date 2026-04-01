@@ -54,7 +54,7 @@ const githubStaleAuthoredPR: NotificationDefinition = {
     const stale = getCachedStaleOpenAuthoredPRs(developerId, warnDays, dangerDays, repos.length ? repos : undefined);
     return stale.map((s) => ({
       title: s.level === "danger" ? `Stale PR: ${s.title}` : `PR waiting for review: ${s.title}`,
-      body: `${s.repo}#${s.prNumber} · open ${Math.floor((Date.now() - new Date(s.createdAt).getTime()) / 86400000)}d, no reviews yet`,
+      body: `${s.repo}#${s.prNumber} · no activity for ${Math.floor((Date.now() - new Date(s.updatedAt).getTime()) / 86400000)}d, no reviews yet`,
       sourceUrl: `https://github.com/${s.repo}/pull/${s.prNumber}`,
       eventUpdatedAt: s.updatedAt,
       payload: {

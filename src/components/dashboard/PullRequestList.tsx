@@ -7,9 +7,9 @@ import type { PullRequest } from "../../../lib/types";
 
 interface PullRequestListProps {
   prs: PullRequest[];
-  /** Days open with zero reviews before warning badge (default 3) */
+  /** Days since last update with zero reviews before warning badge (default 3) */
   staleWarnDays?: number;
-  /** Days open with zero reviews before danger badge (default 7) */
+  /** Days since last update with zero reviews before danger badge (default 7) */
   staleDangerDays?: number;
 }
 
@@ -24,7 +24,7 @@ function staleLevel(
   if (pr.status !== "open") return null;
   const reviews = pr.reviewCount ?? 0;
   if (reviews > 0) return null;
-  const ageDays = (Date.now() - new Date(pr.createdAt).getTime()) / 86400000;
+  const ageDays = (Date.now() - new Date(pr.updatedAt).getTime()) / 86400000;
   if (ageDays >= dangerDays) return "danger";
   if (ageDays >= warnDays) return "warn";
   return null;

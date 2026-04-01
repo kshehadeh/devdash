@@ -144,7 +144,7 @@ Renderer receives push events via preload:
 ## Current built-in notification types
 
 - GitHub: `review_requested`
-- GitHub: `github_stale_pr` — open **authored** PRs with **no reviews** yet and age from creation past warn/danger thresholds (uses cached PRs; thresholds via `pr_stale_warn_days` / `pr_stale_danger_days`)
+- GitHub: `github_stale_pr` — open **authored** PRs with **no reviews** yet and age from last update past warn/danger thresholds (uses cached PRs; thresholds via `pr_stale_warn_days` / `pr_stale_danger_days`)
 - Jira: `assigned_or_watched_ticket_updated`
 - Confluence: `page_activity`
 

@@ -115,7 +115,7 @@ Current schema evolves over migrations, but conceptually it is grouped as:
   | `auto_update_enabled` | Auto-update preference |
   | `notifications_enabled` | Master switch for integration notification polling |
   | `notifications_poll_interval_ms` | Poll interval for notification service |
-  | `pr_stale_warn_days` | Integer — authored open PR with zero reviews: warn tier age (days from creation); used by `github_stale_pr` notifications and dashboard PR list styling |
+  | `pr_stale_warn_days` | Integer — authored open PR with zero reviews: warn tier age (days from last update); used by `github_stale_pr` notifications and dashboard PR list styling |
   | `pr_stale_danger_days` | Integer — same, danger tier |
   | `dashboard_widget_layout_json` | JSON array of dashboard widget ids (order + visibility); see [`features.md`](./features.md) |
 

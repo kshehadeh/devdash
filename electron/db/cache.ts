@@ -236,7 +236,7 @@ export interface StaleOpenPRCandidate {
   level: "warn" | "danger";
 }
 
-/** Open authored PRs that match stale rules (no reviews yet, age from creation). */
+/** Open authored PRs that match stale rules (no reviews yet, age from last update). */
 export function getCachedStaleOpenAuthoredPRs(
   devId: string,
   warnDays: number,
@@ -266,7 +266,7 @@ export function getCachedStaleOpenAuthoredPRs(
 
   for (const row of rows) {
     if (row.review_count > 0) continue;
-    const ageDays = (now - new Date(row.created_at).getTime()) / msDay;
+    const ageDays = (now - new Date(row.updated_at).getTime()) / msDay;
     if (ageDays >= dangerDays) {
       out.push({
         repo: row.repo,
