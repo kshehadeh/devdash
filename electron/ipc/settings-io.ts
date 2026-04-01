@@ -535,6 +535,9 @@ export async function runImportSettings(win: BrowserWindow | null): Promise<void
   }
 }
 
-export function registerSettingsIOHandlers(_getWindow: () => BrowserWindow | null) {
-  void ipcMain;
+export function registerSettingsIOHandlers(getWindow: () => BrowserWindow | null) {
+  ipcMain.handle("settings:export", async () => {
+    const win = getWindow();
+    return runExportSettings(win);
+  });
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Trash2, Plus, Database, Upload } from "lucide-react";
 import { invoke } from "@/lib/api";
 import { DEVELOPER_SOURCES_CHANGED_EVENT } from "@/lib/app-events";
+import { parseCsv, normalizeHeader } from "@/lib/csv";
 import { DataSourcesChecklist } from "@/components/dashboard/DataSourcesChecklist";
 import { Dialog } from "@/components/ui/Dialog";
 import { useAppStatus } from "@/context/AppStatusContext";
@@ -10,86 +11,6 @@ import type { DataSource, Developer } from "@/lib/types";
 function newRowId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-type CsvParseResult = { headers: string[]; rows: string[][] };
-
-function parseCsv(text: string): CsvParseResult {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
-
-  function pushField() {
-    row.push(field);
-    field = "";
-  }
-
-  function pushRow() {
-    rows.push(row);
-    row = [];
-  }
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        const next = text[i + 1];
-        if (next === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-      continue;
-    }
-
-    if (ch === '"') {
-      inQuotes = true;
-      continue;
-    }
-
-    if (ch === ",") {
-      pushField();
-      continue;
-    }
-
-    if (ch === "\n") {
-      pushField();
-      pushRow();
-      continue;
-    }
-
-    if (ch === "\r") {
-      continue;
-    }
-
-    field += ch;
-  }
-
-  if (inQuotes) {
-    throw new Error("CSV parse error: Unterminated quote.");
-  }
-
-  if (field.length > 0 || row.length > 0) {
-    pushField();
-    pushRow();
-  }
-
-  const [rawHeaders, ...dataRows] = rows;
-  if (!rawHeaders) return { headers: [], rows: [] };
-  return { headers: rawHeaders.map((h) => h.trim()), rows: dataRows };
-}
-
-function normalizeHeader(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "");
 }
 
 interface BulkRow {
