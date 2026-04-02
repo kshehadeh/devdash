@@ -1,6 +1,7 @@
 // @ts-nocheck — copied from lib/services, fetch().json() returns unknown in strict mode
 import type { JiraTicket, ConfluenceDoc, ConfluenceActivity } from "../types";
 import { jiraStatusCategoryFromApi } from "../jira-status-category";
+import { resolveAccountId } from "../db/atlassian-account";
 
 function basicAuth(email: string, token: string): string {
   return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
@@ -66,7 +67,7 @@ export async function fetchJiraTickets(
     projectKeys && projectKeys.length > 0 ? ` AND project IN (${jqlProjectKeysInList(projectKeys)})` : "";
 
   // Resolve account ID — Jira Cloud JQL requires accountId for assignee
-  const accountId = await resolveAccountId(site, email, token, atlassianEmail);
+  const accountId = await resolveAccountId(undefined, { site, email, token, lookupEmail: atlassianEmail });
   if (!accountId) {
     console.error("Could not resolve Atlassian account ID for:", atlassianEmail);
     return [];
@@ -135,7 +136,7 @@ export async function fetchJiraDashboardTickets(
   const projectFilter =
     projectKeys && projectKeys.length > 0 ? ` AND project IN (${jqlProjectKeysInList(projectKeys)})` : "";
 
-  const accountId = await resolveAccountId(site, email, token, atlassianEmail);
+  const accountId = await resolveAccountId(undefined, { site, email, token, lookupEmail: atlassianEmail });
   if (!accountId) {
     console.error("[JiraDashboardTickets] Could not resolve Atlassian account ID for:", atlassianEmail);
     return [];
@@ -269,7 +270,7 @@ export async function fetchCompletedTicketCount(
 
   const baseUrl = `https://${site}.atlassian.net`;
 
-  const accountId = await resolveAccountId(site, email, token, atlassianEmail);
+  const accountId = await resolveAccountId(undefined, { site, email, token, lookupEmail: atlassianEmail });
   if (!accountId) return 0;
 
   const sinceDate = new Date();
@@ -306,61 +307,6 @@ export async function fetchCompletedTicketCount(
   return data.issues?.length ?? 0;
 }
 
-// ---------- Atlassian Account Lookup ----------
-
-const accountIdCache = new Map<string, string>();
-
-async function resolveAccountId(
-  site: string,
-  email: string,
-  token: string,
-  lookupEmail: string,
-): Promise<string | null> {
-  const cacheKey = `${site}:${lookupEmail}`;
-  if (accountIdCache.has(cacheKey)) return accountIdCache.get(cacheKey)!;
-
-  const baseUrl = `https://${site}.atlassian.net`;
-  const hdrs = headers(email, token);
-
-  // Try /user/picker first — most reliable for email-based lookup
-  try {
-    const pickerRes = await fetch(
-      `${baseUrl}/rest/api/3/user/picker?query=${encodeURIComponent(lookupEmail)}&maxResults=1`,
-      { headers: hdrs },
-    );
-    if (pickerRes.ok) {
-      const pickerData = await pickerRes.json();
-      const users: { accountId: string; html?: string; displayName?: string }[] = pickerData.users ?? [];
-      if (users.length > 0) {
-        accountIdCache.set(cacheKey, users[0].accountId);
-        return users[0].accountId;
-      }
-    }
-  } catch {
-    // fall through to next attempt
-  }
-
-  // Fallback: /user/search
-  try {
-    const res = await fetch(
-      `${baseUrl}/rest/api/3/user/search?query=${encodeURIComponent(lookupEmail)}&maxResults=5`,
-      { headers: hdrs },
-    );
-    if (res.ok) {
-      const users: { accountId: string; emailAddress?: string; displayName?: string }[] = await res.json();
-      if (users.length > 0) {
-        accountIdCache.set(cacheKey, users[0].accountId);
-        return users[0].accountId;
-      }
-    }
-  } catch {
-    // fall through
-  }
-
-  console.error("[resolveAccountId] Could not resolve account ID for:", lookupEmail);
-  return null;
-}
-
 // ---------- Confluence ----------
 
 interface ConfluenceResult {
@@ -390,7 +336,7 @@ export async function fetchConfluenceDocs(
   const hdrs = headers(email, token);
 
   // Resolve account ID — Confluence CQL requires accountId, not email
-  const accountId = await resolveAccountId(site, email, token, atlassianEmail);
+  const accountId = await resolveAccountId(undefined, { site, email, token, lookupEmail: atlassianEmail });
   if (!accountId) {
     console.error("Could not resolve Atlassian account ID for:", atlassianEmail);
     return [];
@@ -453,7 +399,7 @@ export async function fetchConfluenceActivity(
   const baseUrl = `https://${site}.atlassian.net/wiki`;
 
   // Resolve account ID — Confluence CQL requires accountId, not email
-  const accountId = await resolveAccountId(site, email, token, atlassianEmail);
+  const accountId = await resolveAccountId(undefined, { site, email, token, lookupEmail: atlassianEmail });
   if (!accountId) return [];
 
   const spaceFilter = spaceKeys && spaceKeys.length > 0

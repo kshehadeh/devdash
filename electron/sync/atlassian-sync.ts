@@ -4,6 +4,7 @@ import { getConnection } from "../db/connections";
 import { getDeveloper } from "../db/developers";
 import { getSourcesForDeveloper } from "../db/sources";
 import { getWorkEmailForDeveloper } from "../db/developer-identity";
+import { resolveAccountId } from "../db/atlassian-account";
 import { jiraStatusCategoryFromApi } from "../jira-status-category";
 
 function basicAuth(email: string, token: string): string {
@@ -25,38 +26,6 @@ function jqlProjectKeysInList(keys: string[]): string {
     .filter(Boolean)
     .map((k) => `"${k.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
     .join(", ");
-}
-
-// Shared account ID cache (module-level)
-const accountIdCache = new Map<string, string>();
-
-async function resolveAccountId(
-  site: string, email: string, token: string, lookupEmail: string,
-): Promise<string | null> {
-  const key = `${site}:${lookupEmail}`;
-  if (accountIdCache.has(key)) return accountIdCache.get(key)!;
-
-  const baseUrl = `https://${site}.atlassian.net`;
-  const hdrs = atlHeaders(email, token);
-
-  try {
-    const res = await fetch(`${baseUrl}/rest/api/3/user/picker?query=${encodeURIComponent(lookupEmail)}&maxResults=1`, { headers: hdrs });
-    if (res.ok) {
-      const data = await res.json();
-      const users: { accountId: string }[] = data.users ?? [];
-      if (users.length > 0) { accountIdCache.set(key, users[0].accountId); return users[0].accountId; }
-    }
-  } catch { /* fall through */ }
-
-  try {
-    const res = await fetch(`${baseUrl}/rest/api/3/user/search?query=${encodeURIComponent(lookupEmail)}&maxResults=5`, { headers: hdrs });
-    if (res.ok) {
-      const users: { accountId: string }[] = await res.json();
-      if (users.length > 0) { accountIdCache.set(key, users[0].accountId); return users[0].accountId; }
-    }
-  } catch { /* fall through */ }
-
-  return null;
 }
 
 export function getAtlassianContextForValidation(developerId: string) {
@@ -101,8 +70,16 @@ export async function syncJiraTickets(developerId: string): Promise<void> {
     const baseUrl = `https://${ctx.site}.atlassian.net`;
     const hdrs = atlHeaders(ctx.email, ctx.token);
 
-    const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
-    if (!accountId) { setSyncStatus(developerId, "jira_tickets", "error", "Could not resolve account ID"); return; }
+    const accountId = await resolveAccountId(developerId, {
+      site: ctx.site,
+      email: ctx.email,
+      token: ctx.token,
+      lookupEmail: ctx.atlassianEmail,
+    });
+    if (!accountId) {
+      setSyncStatus(developerId, "jira_tickets", "error", `Could not resolve Jira account ID for: ${ctx.atlassianEmail}`);
+      return;
+    }
 
     const projectFilter = ` AND project IN (${jqlProjectKeysInList(ctx.projectKeys)})`;
     const syncLog = db.prepare(
@@ -235,7 +212,12 @@ export async function reconcileJiraTickets(developerId: string): Promise<void> {
   const baseUrl = `https://${ctx.site}.atlassian.net`;
   const hdrs = atlHeaders(ctx.email, ctx.token);
 
-  const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
+  const accountId = await resolveAccountId(developerId, {
+    site: ctx.site,
+    email: ctx.email,
+    token: ctx.token,
+    lookupEmail: ctx.atlassianEmail,
+  });
   if (!accountId) return;
 
   const projectFilter = jqlProjectKeysInList(ctx.projectKeys);
@@ -308,8 +290,16 @@ export async function syncConfluencePages(developerId: string): Promise<void> {
     const baseUrl = `https://${ctx.site}.atlassian.net/wiki`;
     const hdrs = atlHeaders(ctx.email, ctx.token);
 
-    const accountId = await resolveAccountId(ctx.site, ctx.email, ctx.token, ctx.atlassianEmail);
-    if (!accountId) { setSyncStatus(developerId, "confluence_pages", "error", "Could not resolve account ID"); return; }
+    const accountId = await resolveAccountId(developerId, {
+      site: ctx.site,
+      email: ctx.email,
+      token: ctx.token,
+      lookupEmail: ctx.atlassianEmail,
+    });
+    if (!accountId) {
+      setSyncStatus(developerId, "confluence_pages", "error", `Could not resolve Confluence account ID for: ${ctx.atlassianEmail}`);
+      return;
+    }
 
     const spaceFilter = ` AND space IN (${ctx.spaceKeys.map((k) => `"${k}"`).join(",")})`;
 
