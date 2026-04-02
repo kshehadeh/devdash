@@ -1,17 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Download } from "lucide-react";
+import { AlertTriangle, AlertCircle, Download } from "lucide-react";
 import { clsx } from "clsx";
 import { invoke } from "@/lib/api";
 import { useSelectedDeveloper } from "@/context/SelectedDeveloperContext";
 import { useUpdate } from "@/context/UpdateContext";
+import { useAppStatus } from "@/context/AppStatusContext";
 import { DEVELOPER_SOURCES_CHANGED_EVENT } from "@/lib/app-events";
 import type { DataSource } from "@/lib/types";
 
 export function StatusBarPersistentMessages() {
   const { selectedDevId } = useSelectedDeveloper();
   const { pendingUpdate, autoUpdateChecksEnabled, openUpdateModal } = useUpdate();
+  const { syncErrorCount, setShowSyncErrors } = useAppStatus();
   const [noSourcesWarning, setNoSourcesWarning] = useState(false);
 
   const refreshSourcesWarning = useCallback(async () => {
@@ -45,7 +47,8 @@ export function StatusBarPersistentMessages() {
   }, [refreshSourcesWarning]);
 
   const showUpdateChip = Boolean(pendingUpdate && autoUpdateChecksEnabled);
-  if (!showUpdateChip && !noSourcesWarning) return null;
+  const showSyncErrorsChip = syncErrorCount > 0;
+  if (!showUpdateChip && !noSourcesWarning && !showSyncErrorsChip) return null;
 
   return (
     <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end max-w-[min(420px,48vw)]">
@@ -91,6 +94,28 @@ export function StatusBarPersistentMessages() {
             <span className="text-[var(--on-surface-variant)]">.</span>
           </p>
         </div>
+      )}
+      {showSyncErrorsChip && (
+        <button
+          type="button"
+          onClick={() => setShowSyncErrors(true)}
+          className={clsx(
+            "flex items-center gap-1.5 shrink-0 max-w-[min(300px,42vw)] pl-2 pr-2.5 py-1 rounded-md border text-left",
+            "bg-[color-mix(in_srgb,var(--error-container)_35%,var(--surface-container-low))]",
+            "border-[color-mix(in_srgb,var(--error)_40%,var(--outline-variant))]",
+            "text-[var(--error)] hover:opacity-90 transition-opacity cursor-pointer",
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <AlertCircle className="shrink-0" size={14} strokeWidth={2.25} aria-hidden />
+          <span className="text-[10px] font-label leading-tight min-w-0">
+            <span className="font-semibold text-[var(--on-surface)]">
+              {syncErrorCount} sync error{syncErrorCount === 1 ? "" : "s"}
+            </span>
+            <span className="text-[var(--on-surface-variant)]"> — click for details</span>
+          </span>
+        </button>
       )}
     </div>
   );

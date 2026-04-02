@@ -17,6 +17,7 @@ import type {
   ToastItem,
   SyncProgressPayload,
   SyncStatusResponse,
+  SyncErrorEntry,
 } from "@/lib/types";
 
 // ---- Channel → category mapping ----
@@ -82,6 +83,14 @@ interface AppStatusContextValue {
   refreshSyncStatus: () => Promise<void>;
   /** Register an IPC channel to be soft-refreshed when its data category completes syncing. Returns unsubscribe fn. */
   subscribeSyncInvalidation: (channel: string, callback: SyncInvalidationCallback) => () => void;
+  /** Sync errors from the last sync run */
+  syncErrors: SyncErrorEntry[];
+  syncErrorCount: number;
+  refreshSyncErrors: () => Promise<void>;
+  clearSyncErrors: () => void;
+  /** Whether the sync errors modal is visible */
+  showSyncErrors: boolean;
+  setShowSyncErrors: (open: boolean) => void;
 }
 
 const AppStatusContext = createContext<AppStatusContextValue | null>(null);
@@ -92,12 +101,12 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [syncErrors, setSyncErrors] = useState<SyncErrorEntry[]>([]);
+  const [showSyncErrors, setShowSyncErrors] = useState(false);
 
   // ---- Sync invalidation subscriptions ----
   // Map of IPC channel → Set of callbacks to fire on sync completion.
   const subsRef = useRef(new Map<string, Set<SyncInvalidationCallback>>());
-  /** Debounce timer so rapid sync completions don't fire callbacks multiple times. */
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const subscribeSyncInvalidation = useCallback(
     (channel: string, callback: SyncInvalidationCallback): (() => void) => {
@@ -142,36 +151,48 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // ---- Sync errors handling ----
+  const fetchSyncErrors = useCallback(async () => {
+    try {
+      const errors = await invoke<SyncErrorEntry[]>("sync:errors");
+      setSyncErrors(errors ?? []);
+    } catch {
+      setSyncErrors([]);
+    }
+  }, []);
+
+  const clearSyncErrors = useCallback(() => {
+    setSyncErrors([]);
+  }, []);
+
   useEffect(() => {
     void fetchSyncStatus();
     const id = setInterval(() => void fetchSyncStatus(), 5000);
     return () => clearInterval(id);
   }, [fetchSyncStatus]);
 
-  // Wire the global sync-invalidation subscriber so useIpc hooks auto-refresh after sync.
+  useEffect(() => {
+    void fetchSyncErrors();
+  }, [fetchSyncErrors]);
+
+  // Wire the global sync-invalidation subscriber so useIpc hooks auto-refreshed after sync.
   useEffect(() => {
     setSyncInvalidationSubscriber(subscribeSyncInvalidation);
     return () => setSyncInvalidationSubscriber(null);
   }, [subscribeSyncInvalidation]);
 
+  // Listen for sync progress to notify subscribers when sync completes
   useEffect(() => {
     const off = window.electron.onSyncProgress((raw) => {
       const p = parseProgress(raw);
-      if (p) {
-        setProgress(p);
-        // When sync transitions to idle with completedCategories, notify subscribers (debounced)
-        if (!p.syncing && p.completedCategories && p.completedCategories.length > 0) {
-          if (debounceRef.current) clearTimeout(debounceRef.current);
-          const cats = p.completedCategories;
-          debounceRef.current = setTimeout(() => {
-            notifySubscribers(cats);
-            debounceRef.current = null;
-          }, 500);
-        }
+      if (p && !p.syncing && p.completedCategories && p.completedCategories.length > 0) {
+        notifySubscribers(p.completedCategories);
+        // Also refresh sync errors after sync completes
+        void fetchSyncErrors();
       }
     });
     return off;
-  }, [notifySubscribers]);
+  }, [notifySubscribers, fetchSyncErrors]);
 
   useEffect(() => {
     const off = window.electron.onNetworkStatus(({ online: next }) => {
@@ -228,6 +249,7 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
   }, [pushToast]);
 
   const syncing = progress.syncing;
+  const syncErrorCount = syncErrors.length;
 
   const value = useMemo(
     () => ({
@@ -243,8 +265,14 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
       dismissToast,
       refreshSyncStatus: fetchSyncStatus,
       subscribeSyncInvalidation,
+      syncErrors,
+      syncErrorCount,
+      refreshSyncErrors: fetchSyncErrors,
+      clearSyncErrors,
+      showSyncErrors,
+      setShowSyncErrors,
     }),
-    [syncing, progress, lastSyncedAt, online, notifications, pushNotification, dismissNotification, toasts, pushToast, dismissToast, fetchSyncStatus, subscribeSyncInvalidation],
+    [syncing, progress, lastSyncedAt, online, notifications, pushNotification, dismissNotification, toasts, pushToast, dismissToast, fetchSyncStatus, subscribeSyncInvalidation, syncErrors, syncErrorCount, fetchSyncErrors, clearSyncErrors, showSyncErrors],
   );
 
   return <AppStatusContext.Provider value={value}>{children}</AppStatusContext.Provider>;

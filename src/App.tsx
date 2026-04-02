@@ -25,6 +25,7 @@ import { invoke, type ContextMenuAction } from "./lib/api";
 import { formatReminderTitle } from "./lib/reminder-context";
 import { useSelectedDeveloper } from "./context/SelectedDeveloperContext";
 import { CommandPaletteStateProvider, useCommandPaletteControls } from "./context/CommandPaletteContext";
+import { SyncErrorsModal } from "./components/layout/SyncErrorsModal";
 
 function MainLayoutInner() {
   const { selectedDevId } = useSelectedDeveloper();
@@ -161,6 +162,7 @@ export default function App() {
           <RoutedApp />
         </div>
         <ToastContainer />
+        <SyncErrorsModal />
       </UpdateProvider>
     </AppStatusProvider>
   );

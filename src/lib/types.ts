@@ -248,6 +248,15 @@ export type SyncTriggerResult =
   | { triggered: true }
   | { triggered: false; reason: "offline" };
 
+export interface SyncErrorEntry {
+  scope: "developer" | "repo";
+  developerName?: string;
+  repoName?: string;
+  dataType: string;
+  errorMessage: string;
+  lastSyncedAt: string;
+}
+
 export type AppNotificationType = "info" | "success" | "warning" | "error";
 
 export interface AppNotification {
