@@ -331,4 +331,58 @@ describe("syncPullRequests", () => {
     expect(open?.status).toBe("open");
     expect(JSON.parse(open!.pending_reviewers_json)).toEqual(["r1"]);
   });
+
+  it("reconciles cached open PRs not returned by the search query", async () => {
+    const { dev } = setupGitHubDevWithRepo();
+    const now = new Date().toISOString();
+
+    // Pre-seed a PR as open that won't appear in the search results
+    db.prepare(
+      "INSERT INTO cached_pull_requests (developer_id, pr_number, repo, title, status, review_count, created_at, updated_at, pending_reviewers_json) VALUES (?, 99, 'my-org/my-repo', 'Old PR', 'open', 0, ?, ?, '[]')",
+    ).run(dev.id, now, now);
+
+    // Mock: search returns only PR #200 (not PR #99); the REST endpoint for PR #99 returns merged
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/pulls/99")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ state: "closed", merged_at: "2026-01-15T10:00:00Z" }),
+        });
+      }
+      // All search endpoints return PR #200
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            total_count: 1,
+            items: [
+              {
+                number: 200,
+                title: "New PR",
+                state: "open",
+                pull_request: { merged_at: null },
+                created_at: now,
+                updated_at: now,
+                repository_url: "https://api.github.com/repos/my-org/my-repo",
+                requested_reviewers: [],
+                user: { login: "testuser" },
+                html_url: "https://github.com/my-org/my-repo/pull/200",
+              },
+            ],
+          }),
+        text: () => Promise.resolve(""),
+      });
+    });
+    global.fetch = mockFetch;
+
+    await syncPullRequests(dev.id);
+
+    const pr99 = db
+      .prepare("SELECT status, merged_at, pending_reviewers_json FROM cached_pull_requests WHERE developer_id = ? AND pr_number = 99")
+      .get(dev.id) as { status: string; merged_at: string | null; pending_reviewers_json: string };
+
+    expect(pr99.status).toBe("merged");
+    expect(pr99.merged_at).toBe("2026-01-15T10:00:00Z");
+    expect(pr99.pending_reviewers_json).toBe("[]");
+  });
 });

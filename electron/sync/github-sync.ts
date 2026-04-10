@@ -197,6 +197,9 @@ export async function syncPullRequests(developerId: string): Promise<void> {
 
     let latestUpdated = since;
 
+    // Track which (repo, pr_number) pairs are touched in this sync cycle
+    const touchedPRKeys = new Set<string>();
+
     db.transaction(() => {
       const runUpsert = (e: ReturnType<typeof preparePullForCache>) => {
         const pr = e.pr;
@@ -217,6 +220,7 @@ export async function syncPullRequests(developerId: string): Promise<void> {
           e.pendingJson,
         );
 
+        touchedPRKeys.add(`${e.repoPath}:${pr.number}`);
         if (pr.updated_at > latestUpdated) latestUpdated = pr.updated_at;
       };
 
@@ -228,6 +232,49 @@ export async function syncPullRequests(developerId: string): Promise<void> {
         insertReviewReq.run(developerId, r.repo, r.number, r.title, r.authorLogin, r.updatedAt);
       }
     })();
+
+    // Reconcile cached open PRs that weren't returned by this sync's search queries.
+    // This catches PRs merged/closed since the last sync but missed due to search index lag,
+    // pagination caps, or transient API failures.
+    const staleOpenRows = db.prepare(
+      "SELECT pr_number, repo FROM cached_pull_requests WHERE developer_id = ? AND status = 'open'",
+    ).all(developerId) as { pr_number: number; repo: string }[];
+
+    const unverified = staleOpenRows.filter(
+      (row) => !touchedPRKeys.has(`${row.repo}:${row.pr_number}`),
+    );
+
+    if (unverified.length > 0) {
+      const RECONCILE_CONCURRENCY = 5;
+      const updateStatus = db.prepare(`
+        UPDATE cached_pull_requests
+        SET status = ?, merged_at = ?, pending_reviewers_json = '[]'
+        WHERE developer_id = ? AND repo = ? AND pr_number = ?
+      `);
+
+      const reconcileOne = async (row: { pr_number: number; repo: string }) => {
+        try {
+          const res = await fetch(`${GITHUB_API}/repos/${row.repo}/pulls/${row.pr_number}`, {
+            headers: headers(token),
+          });
+          if (!res.ok) return;
+          const pr = await res.json();
+          if (pr.state === "open") return;
+
+          const mergedAt: string | null = pr.merged_at ?? null;
+          const newStatus = mergedAt ? "merged" : "closed";
+          updateStatus.run(newStatus, mergedAt, developerId, row.repo, row.pr_number);
+        } catch {
+          // ignore individual reconciliation failures
+        }
+      };
+
+      for (let i = 0; i < unverified.length; i += RECONCILE_CONCURRENCY) {
+        await Promise.allSettled(
+          unverified.slice(i, i + RECONCILE_CONCURRENCY).map(reconcileOne),
+        );
+      }
+    }
 
     setSyncStatus(developerId, "github_pull_requests", "ok", null, latestUpdated.split("T")[0]);
   } catch (err) {
