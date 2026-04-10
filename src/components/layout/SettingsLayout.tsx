@@ -1,4 +1,5 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
+import { useEffect } from "react";
 import { SlidersHorizontal, Terminal, Database, HardDrive, Bell, Wrench } from "lucide-react";
 import { clsx } from "clsx";
 import { AppWindowHeader } from "@/components/layout/AppWindowHeader";
@@ -14,6 +15,13 @@ const settingsNav = [
 
 export default function SettingsLayout() {
   const { pathname } = useLocation();
+
+  useEffect(() => {
+    const match = pathname.match(/^\/settings\/(\w+)/);
+    if (match) {
+      localStorage.setItem("devdash.lastSettingsTab", match[1]);
+    }
+  }, [pathname]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

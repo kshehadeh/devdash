@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation, Outlet } from "react-router-dom";
+
+const VALID_SETTINGS_TABS = ["general", "connections", "notifications", "sources", "cache", "development"] as const;
+const LAST_SETTINGS_TAB_KEY = "devdash.lastSettingsTab";
+
+function SettingsRedirect() {
+  const stored = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+  const tab = stored && (VALID_SETTINGS_TABS as readonly string[]).includes(stored) ? stored : "general";
+  return <Navigate to={tab} replace />;
+}
 import { AppStatusProvider } from "./context/AppStatusContext";
 import { ToastContainer } from "./components/ui/Toast";
 import { UpdateProvider } from "./context/UpdateContext";
@@ -135,7 +144,7 @@ function RoutedApp() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/reminders" element={<RemindersPage />} />
         <Route path="/settings" element={<SettingsLayout />}>
-          <Route index element={<Navigate to="connections" replace />} />
+          <Route index element={<SettingsRedirect />} />
           <Route path="connections" element={<Connections />} />
           <Route path="notifications" element={<NotificationsSettings />} />
           <Route path="sources" element={<Sources />} />
