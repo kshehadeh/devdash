@@ -5,6 +5,7 @@ import { syncConfluenceSpaceList } from "./atlassian-sync";
 import { broadcastSyncProgress, broadcastSyncWarning, type SyncProgressPayload } from "./progress-broadcast";
 import { getConnection, hasUsableToken } from "../db/connections";
 import { getIntegrationSettings } from "../db/integration-settings";
+import { getCurrentUserDeveloper, listDevelopers } from "../db/developers";
 
 /** How old repo-level sync data must be before re-syncing (10 min). */
 const REPO_SYNC_MIN_AGE_MS = 10 * 60 * 1000;
@@ -16,6 +17,37 @@ let _syncing = false;
 let _foregroundSyncDepth = 0;
 /** Categories synced in the current foreground run — accumulated across chained syncDeveloper calls. */
 let _syncedCategories = new Set<string>();
+
+// ---- Current sync developer ----
+/** The developer ID that the scheduler and manual sync should target. */
+let _selectedDeveloperId: string | null = null;
+
+export function setSelectedDeveloperId(id: string | null): void {
+  _selectedDeveloperId = id;
+}
+
+export function getSelectedDeveloperId(): string | null {
+  return _selectedDeveloperId;
+}
+
+/**
+ * Returns the best available developer ID to sync:
+ * 1. The explicitly selected developer
+ * 2. The current-user developer
+ * 3. The first developer in the DB
+ * Returns null only when no developers exist at all.
+ */
+export function getDefaultSyncDeveloperId(): string | null {
+  if (_selectedDeveloperId) return _selectedDeveloperId;
+  try {
+    const cur = getCurrentUserDeveloper();
+    if (cur) return cur.id;
+    const all = listDevelopers();
+    return all.length > 0 ? all[0].id : null;
+  } catch {
+    return null;
+  }
+}
 
 function idleProgress(): SyncProgressPayload {
   let n = 1;
@@ -75,8 +107,8 @@ export async function syncDeveloper(developerId: string, opts: SyncDeveloperOpti
   if (!isNetworkOnline()) return;
 
   // For single-developer syncs, run repo-level sync scoped to this developer's repos only
-  if (scope === "single" && !silent) {
-    await syncReposForDeveloper(developerId).catch((err) =>
+  if (scope === "single") {
+    await syncReposForDeveloper(developerId, silent).catch((err) =>
       console.error("[Sync] Repo-level GitHub sync error (single dev):", err),
     );
   }
@@ -100,6 +132,12 @@ export async function syncDeveloper(developerId: string, opts: SyncDeveloperOpti
       if (r.status === "rejected") {
         console.error(`[Sync] Developer ${developerId} sync error:`, r.reason);
       }
+    }
+    // Broadcast completion even for silent syncs so the UI refreshes lastSyncedAt and data
+    if (_foregroundSyncDepth === 0 && !_syncing) {
+      const cats = [..._syncedCategories];
+      _syncedCategories = new Set();
+      resetProgress(cats);
     }
     return;
   }
@@ -285,6 +323,7 @@ async function syncRepos(
   token: string,
   repos: Array<{ org: string; name: string }>,
   scope: "full" | "single" = "single",
+  silent = false,
 ): Promise<number> {
   if (repos.length === 0) return 0;
 
@@ -294,14 +333,16 @@ async function syncRepos(
   const tasks = repos.map((repo) => async () => {
     const repoName = `${repo.org}/${repo.name}`;
 
-    emitProgress({
-      syncing: true,
-      scope,
-      completedSteps: completed,
-      totalSteps: repos.length,
-      activeLabels: [`Syncing GitHub repo: ${repoName}`],
-      phase: "sync",
-    });
+    if (!silent) {
+      emitProgress({
+        syncing: true,
+        scope,
+        completedSteps: completed,
+        totalSteps: repos.length,
+        activeLabels: [`Syncing GitHub repo: ${repoName}`],
+        phase: "sync",
+      });
+    }
 
     const commentsFresh = isRepoSyncFresh(repo.org, repo.name, "pr_review_comments", REPO_SYNC_MIN_AGE_MS);
     const reviewsFresh = isRepoSyncFresh(repo.org, repo.name, "pr_reviews", REPO_SYNC_MIN_AGE_MS);
@@ -351,7 +392,7 @@ async function syncAllReposOnce(): Promise<number> {
 }
 
 /** Syncs repo-level data scoped only to the given developer's assigned repos. */
-async function syncReposForDeveloper(developerId: string): Promise<number> {
+async function syncReposForDeveloper(developerId: string, silent = false): Promise<number> {
   const { getConnection } = await import("../db/connections");
   const ghConn = getConnection("github");
   if (!ghConn?.connected || !ghConn.token) return 0;
@@ -364,7 +405,7 @@ async function syncReposForDeveloper(developerId: string): Promise<number> {
   if (repos.length === 0) return 0;
 
   console.log(`[Sync] Syncing ${repos.length} repo(s) for developer ${developerId}`);
-  return syncRepos(ghConn.token, repos, "single");
+  return syncRepos(ghConn.token, repos, "single", silent);
 }
 
 export function isSyncing(): boolean {

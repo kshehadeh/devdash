@@ -1,10 +1,23 @@
 import { isNetworkOnline } from "../network-monitor";
-import { syncAll } from "./engine";
+import { syncDeveloper, getDefaultSyncDeveloperId } from "./engine";
 
 const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let started = false;
+
+function syncCurrentDeveloper() {
+  if (!isNetworkOnline()) return;
+  const devId = getDefaultSyncDeveloperId();
+  if (!devId) {
+    console.log("[SyncScheduler] No developer to sync");
+    return;
+  }
+  console.log(`[SyncScheduler] Syncing developer ${devId} (background)`);
+  syncDeveloper(devId, { scope: "single", devIndex: 1, devTotal: 1, silent: true }).catch((err) =>
+    console.error("[SyncScheduler] Scheduled sync error:", err),
+  );
+}
 
 export function startSyncScheduler(): void {
   if (process.env.DEVDASH_DISABLE_SYNC === "1") {
@@ -17,15 +30,9 @@ export function startSyncScheduler(): void {
   console.log("[SyncScheduler] Starting — initial sync in 5s, then every 15 minutes");
 
   // Delay initial sync by 5 seconds to let the server finish starting
-  setTimeout(() => {
-    if (!isNetworkOnline()) return;
-    syncAll().catch((err) => console.error("[SyncScheduler] Initial sync error:", err));
-  }, 5000);
+  setTimeout(syncCurrentDeveloper, 5000);
 
-  intervalId = setInterval(() => {
-    if (!isNetworkOnline()) return;
-    syncAll().catch((err) => console.error("[SyncScheduler] Scheduled sync error:", err));
-  }, SYNC_INTERVAL_MS);
+  intervalId = setInterval(syncCurrentDeveloper, SYNC_INTERVAL_MS);
 }
 
 export function stopSyncScheduler(): void {

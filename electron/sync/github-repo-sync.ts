@@ -59,7 +59,9 @@ export function isRepoSyncFresh(org: string, repo: string, dataType: string, max
     "SELECT last_synced_at, status FROM repo_sync_log WHERE org = ? AND repo = ? AND data_type = ?",
   ).get(org, repo, dataType) as { last_synced_at: string; status: string } | undefined;
   if (!row || row.status !== "ok") return false;
-  return Date.now() - new Date(row.last_synced_at).getTime() < maxAgeMs;
+  // SQLite datetime('now') returns UTC without Z; append Z for correct JS UTC parsing
+  const iso = row.last_synced_at.endsWith("Z") ? row.last_synced_at : row.last_synced_at + "Z";
+  return Date.now() - new Date(iso).getTime() < maxAgeMs;
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {

@@ -1,8 +1,17 @@
 import { ipcMain } from "electron";
 import { isNetworkOnline } from "../network-monitor";
-import { syncAll, syncDeveloper, isSyncing, getSyncProgress } from "../sync/engine";
+import { syncDeveloper, isSyncing, getSyncProgress, setSelectedDeveloperId, getDefaultSyncDeveloperId } from "../sync/engine";
 import { getDb } from "../db/index";
 import { getAllSyncStatuses } from "../db/cache";
+
+/** SQLite datetime('now') returns UTC without a Z suffix. Append Z to force UTC parsing in JS. */
+function toUtcIso(val: string): string;
+function toUtcIso(val: string | null): string | null;
+function toUtcIso(val: string | null): string | null {
+  if (!val) return val;
+  if (val.endsWith("Z") || val.endsWith("+")) return val;
+  return val + "Z";
+}
 
 export interface SyncErrorEntry {
   scope: "developer" | "repo";
@@ -18,14 +27,19 @@ export function registerSyncHandlers() {
     if (!isNetworkOnline()) {
       return { triggered: false as const, reason: "offline" as const };
     }
-    if (data?.developerId) {
-      syncDeveloper(data.developerId, { scope: "single", devIndex: 1, devTotal: 1 }).catch((err) =>
-        console.error("[sync:trigger] Developer sync error:", err),
-      );
-    } else {
-      syncAll().catch((err) => console.error("[sync:trigger] Full sync error:", err));
+    const devId = data?.developerId ?? getDefaultSyncDeveloperId();
+    if (!devId) {
+      return { triggered: false as const, reason: "no_developer" as const };
     }
+    console.log(`[sync:trigger] Syncing developer ${devId} (foreground)`);
+    syncDeveloper(devId, { scope: "single", devIndex: 1, devTotal: 1 }).catch((err) =>
+      console.error("[sync:trigger] Developer sync error:", err),
+    );
     return { triggered: true as const };
+  });
+
+  ipcMain.handle("sync:set-selected-developer", (_e, data: { developerId: string | null }) => {
+    setSelectedDeveloperId(data.developerId ?? null);
   });
 
   ipcMain.handle("sync:status", () => {
@@ -71,7 +85,7 @@ export function registerSyncHandlers() {
         developerName: row.name,
         dataType: row.data_type,
         errorMessage: row.error_message,
-        lastSyncedAt: row.last_synced_at,
+        lastSyncedAt: toUtcIso(row.last_synced_at),
       });
     }
 
@@ -94,7 +108,7 @@ export function registerSyncHandlers() {
         repoName: `${row.org}/${row.repo}`,
         dataType: row.data_type,
         errorMessage: row.error_message,
-        lastSyncedAt: row.last_synced_at,
+        lastSyncedAt: toUtcIso(row.last_synced_at),
       });
     }
 

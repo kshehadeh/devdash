@@ -164,6 +164,8 @@ export interface PRReviewCommentsResponse {
   _syncedAtApprovals?: string;
 }
 
+export type TeamRowDataStatus = "current" | "stale" | "no_data";
+
 export interface TeamOverviewRow {
   developerId: string;
   name: string;
@@ -174,6 +176,8 @@ export interface TeamOverviewRow {
   ticketVelocity: number;
   openPrCount: number;
   pendingReviewCount: number;
+  dataStatus: TeamRowDataStatus;
+  lastSyncedAt: string | null;
 }
 
 export interface TeamOverviewResponse {

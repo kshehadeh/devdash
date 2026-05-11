@@ -33,6 +33,7 @@ import {
   countCachedPRApprovalsGiven,
   getCachedMyOpenPRReviewItems,
   getCachedReviewRequestItems,
+  getAllSyncStatuses,
 } from "../db/cache";
 import { listDevelopers } from "../db/developers";
 import { syncDeveloper } from "../sync/engine";
@@ -44,6 +45,7 @@ import type {
   ConfluenceStatsResponse,
   PRReviewCommentsResponse,
   TeamOverviewResponse,
+  TeamOverviewRow,
 } from "../types";
 
 function computeWorkloadHealth(tickets: JiraTicket[]): number {
@@ -362,6 +364,40 @@ async function buildPRReviewCommentsStats(id: string, days: number): Promise<PRR
   };
 }
 
+/** 24 hours — threshold for team overview row staleness. */
+const TEAM_OVERVIEW_STALE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Determines per-developer data status for team overview.
+ * - no_data: never successfully synced relevant data types
+ * - stale: last successful sync is older than TEAM_OVERVIEW_STALE_MS
+ * - current: last successful sync is within TEAM_OVERVIEW_STALE_MS
+ */
+function computeTeamRowDataStatus(devId: string): { dataStatus: TeamOverviewRow["dataStatus"]; lastSyncedAt: string | null } {
+  const allStatuses = getAllSyncStatuses(devId);
+  const relevantTypes = ["github_pull_requests", "jira_tickets", "linear_issues", "github_contributions"];
+  const relevantEntries = relevantTypes
+    .map((t) => allStatuses[t])
+    .filter((s): s is NonNullable<typeof s> => s != null);
+
+  // If no successful sync ever, it's no_data
+  const successfulEntries = relevantEntries.filter((s) => s.status === "ok");
+  if (successfulEntries.length === 0) {
+    return { dataStatus: "no_data", lastSyncedAt: null };
+  }
+
+  const latestSync = successfulEntries
+    .map((s) => s.lastSyncedAt)
+    .sort()
+    .pop()!;
+  const age = Date.now() - new Date(latestSync).getTime();
+
+  if (age > TEAM_OVERVIEW_STALE_MS) {
+    return { dataStatus: "stale", lastSyncedAt: latestSync };
+  }
+  return { dataStatus: "current", lastSyncedAt: latestSync };
+}
+
 async function buildTeamOverview(days: number): Promise<TeamOverviewResponse> {
   const developers = listDevelopers();
   const rows: TeamOverviewResponse["rows"] = [];
@@ -370,8 +406,30 @@ async function buildTeamOverview(days: number): Promise<TeamOverviewResponse> {
     const ctx = getStatsContext(d.id, days);
     if (!ctx) continue;
 
-    const velocity = await buildVelocityStats(d.id, days);
-    const tickets = await buildTicketsStats(d.id, days);
+    const { dataStatus, lastSyncedAt } = computeTeamRowDataStatus(d.id);
+
+    // Read directly from cache — no auto-sync triggers
+    let velocity = 0;
+    let mergeRatio = 0;
+    let reviewTurnaroundHours = 0;
+    if (ctx.integration.code === "github") {
+      const v = computeCachedVelocity(d.id, days, ctx.repoFilter);
+      velocity = v.velocity;
+      mergeRatio = computeCachedMergeRatio(d.id, days, ctx.repoFilter);
+      reviewTurnaroundHours = computeCachedReviewTurnaroundHours(d.id, days, ctx.repoFilter);
+    }
+
+    let workloadHealth = 10;
+    let ticketVelocity = 0;
+    if (ctx.integration.work === "jira" && ctx.atConn?.org) {
+      const tickets = getCachedJiraDashboardTickets(d.id, ctx.atConn.org, ctx.projectFilter);
+      workloadHealth = computeWorkloadHealth(tickets);
+      ticketVelocity = getCachedCompletedTicketCount(d.id, days, ctx.projectFilter);
+    } else if (ctx.integration.work === "linear") {
+      const tickets = getCachedLinearDashboardTicketsAsJiraShape(d.id, ctx.linearTeamFilter, ctx.linearConn?.org ?? undefined);
+      workloadHealth = computeWorkloadHealth(tickets);
+      ticketVelocity = getCachedLinearCompletedCount(d.id, days, ctx.linearTeamFilter);
+    }
 
     let openPrCount = 0;
     let pendingReviewCount = 0;
@@ -383,13 +441,15 @@ async function buildTeamOverview(days: number): Promise<TeamOverviewResponse> {
     rows.push({
       developerId: d.id,
       name: d.name,
-      velocity: velocity.velocity,
-      mergeRatio: velocity.mergeRatio,
-      reviewTurnaroundHours: velocity.reviewTurnaroundHours,
-      workloadHealth: tickets.workloadHealth,
-      ticketVelocity: tickets.ticketVelocity,
+      velocity,
+      mergeRatio,
+      reviewTurnaroundHours,
+      workloadHealth,
+      ticketVelocity,
       openPrCount,
       pendingReviewCount,
+      dataStatus,
+      lastSyncedAt,
     });
   }
 

@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { invoke } from "@/lib/api";
 
 const STORAGE_KEY = "devdash.selectedDevId";
 
@@ -21,6 +22,13 @@ const SelectedDeveloperContext = createContext<SelectedDeveloperContextValue | n
 
 export function SelectedDeveloperProvider({ children }: { children: ReactNode }) {
   const [selectedDevId, setSelectedDevIdState] = useState(() => localStorage.getItem(STORAGE_KEY) ?? "");
+
+  // Notify main process whenever the selected developer changes
+  useEffect(() => {
+    if (selectedDevId) {
+      invoke("sync:set-selected-developer", { developerId: selectedDevId }).catch(() => {});
+    }
+  }, [selectedDevId]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, selectedDevId);

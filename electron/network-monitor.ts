@@ -41,7 +41,12 @@ export function startNetworkMonitor(): void {
     broadcast(now);
     if (wasOffline && now) {
       import("./sync/engine")
-        .then(({ syncAll }) => syncAll().catch((err) => console.error("[Network] Reconnect sync error:", err)))
+        .then(({ syncDeveloper, getDefaultSyncDeveloperId }) => {
+          const devId = getDefaultSyncDeveloperId();
+          if (devId) {
+            syncDeveloper(devId, { scope: "single", devIndex: 1, devTotal: 1, silent: true }).catch((err) => console.error("[Network] Reconnect sync error:", err));
+          }
+        })
         .catch((err) => console.error("[Network] Failed to load sync engine:", err));
     }
   };

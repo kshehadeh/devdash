@@ -151,8 +151,8 @@ export function StatusBar() {
               !online
                 ? "Connect to the internet to sync"
                 : selectedDevId
-                  ? "Sync data from connected integrations for the selected developer"
-                  : "Sync all developers from connected integrations"
+                  ? "Sync data for the selected developer"
+                  : "Sync data for the current developer"
             }
           >
             <RefreshCw size={14} className={clsx("text-[var(--on-surface-variant)]", spin && "animate-spin")} />

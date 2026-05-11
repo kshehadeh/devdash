@@ -29,6 +29,7 @@ const CHANNEL_CATEGORIES: Record<string, string[]> = {
   "stats:velocity": ["code", "work"],
   "stats:docs": ["docs"],
   "stats:review-comments": ["code"],
+  "stats:team-overview": ["code", "work"],
   "reviews:get": ["code"],
   "notifications:list": ["code", "work", "docs"],
   "reminders:list": ["code", "work", "docs"],
@@ -181,18 +182,24 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
     return () => setSyncInvalidationSubscriber(null);
   }, [subscribeSyncInvalidation]);
 
-  // Listen for sync progress to notify subscribers when sync completes
+  // Listen for sync progress to update UI state in real-time and notify subscribers when sync completes
   useEffect(() => {
     const off = window.electron.onSyncProgress((raw) => {
       const p = parseProgress(raw);
-      if (p && !p.syncing && p.completedCategories && p.completedCategories.length > 0) {
-        notifySubscribers(p.completedCategories);
-        // Also refresh sync errors after sync completes
+      if (!p) return;
+      // Update progress state in real-time (not just on completion)
+      setProgress(p);
+      if (!p.syncing) {
+        // Sync finished — refresh lastSyncedAt and sync errors immediately
+        void fetchSyncStatus();
+        if (p.completedCategories && p.completedCategories.length > 0) {
+          notifySubscribers(p.completedCategories);
+        }
         void fetchSyncErrors();
       }
     });
     return off;
-  }, [notifySubscribers, fetchSyncErrors]);
+  }, [notifySubscribers, fetchSyncErrors, fetchSyncStatus]);
 
   useEffect(() => {
     const off = window.electron.onNetworkStatus(({ online: next }) => {

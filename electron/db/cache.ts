@@ -30,13 +30,23 @@ export interface SyncStatusEntry {
   errorMessage: string | null;
 }
 
+/** SQLite datetime('now') returns UTC without a Z suffix (e.g. "2026-05-11 18:00:00").
+ *  JavaScript's Date constructor parses that as local time. Append Z to force UTC parsing. */
+function toUtcIso(val: string): string;
+function toUtcIso(val: string | null): string | null;
+function toUtcIso(val: string | null): string | null {
+  if (!val) return val;
+  if (val.endsWith("Z") || val.endsWith("+")) return val;
+  return val + "Z";
+}
+
 export function getSyncStatus(devId: string, dataType: string): SyncStatusEntry | null {
   const db = getDb();
   const row = db.prepare(
     "SELECT last_synced_at, status, error_message FROM sync_log WHERE developer_id = ? AND data_type = ?",
   ).get(devId, dataType) as { last_synced_at: string; status: string; error_message: string | null } | undefined;
   if (!row) return null;
-  return { lastSyncedAt: row.last_synced_at, status: row.status as SyncStatusEntry["status"], errorMessage: row.error_message };
+  return { lastSyncedAt: toUtcIso(row.last_synced_at), status: row.status as SyncStatusEntry["status"], errorMessage: row.error_message };
 }
 
 export function getAllSyncStatuses(devId: string): Record<string, SyncStatusEntry> {
@@ -48,7 +58,7 @@ export function getAllSyncStatuses(devId: string): Record<string, SyncStatusEntr
   const result: Record<string, SyncStatusEntry> = {};
   for (const row of rows) {
     result[row.data_type] = {
-      lastSyncedAt: row.last_synced_at,
+      lastSyncedAt: toUtcIso(row.last_synced_at),
       status: row.status as SyncStatusEntry["status"],
       errorMessage: row.error_message,
     };

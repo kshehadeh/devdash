@@ -20,7 +20,9 @@ function isDevSyncFresh(developerId: string, dataType: string, maxAgeMs: number)
     "SELECT last_synced_at, status FROM sync_log WHERE developer_id = ? AND data_type = ?",
   ).get(developerId, dataType) as { last_synced_at: string; status: string } | undefined;
   if (!row || row.status !== "ok") return false;
-  return Date.now() - new Date(row.last_synced_at).getTime() < maxAgeMs;
+  // SQLite datetime('now') returns UTC without Z; append Z for correct JS UTC parsing
+  const iso = row.last_synced_at.endsWith("Z") ? row.last_synced_at : row.last_synced_at + "Z";
+  return Date.now() - new Date(iso).getTime() < maxAgeMs;
 }
 
 function headers(token: string) {
@@ -108,8 +110,6 @@ export async function syncPullRequests(developerId: string): Promise<void> {
     .filter((s) => s.type === "github_repo")
     .map((s) => ({ org: s.org, name: s.identifier }));
 
-  const repoFilter = " " + ghRepos.map((r) => `repo:${r.org}/${r.name}`).join(" ");
-
   setSyncStatus(developerId, "github_pull_requests", "syncing");
 
   try {
@@ -137,27 +137,53 @@ export async function syncPullRequests(developerId: string): Promise<void> {
       since = d.toISOString().split("T")[0];
     }
 
-    const allPRs: SearchPRItem[] = [];
-
-    // Fetch all PRs (open + closed + merged) updated since cursor
-    const q = `type:pr author:${username} updated:>=${since}${repoFilter} sort:updated-asc`.trim();
-    let page = 1;
-    let hasMore = true;
-
-    while (hasMore) {
-      const url = `${GITHUB_API}/search/issues?q=${encodeURIComponent(q)}&per_page=100&page=${page}`;
-      const res = await fetch(url, { headers: headers(token) });
-      if (!res.ok) break;
-
-      const data = await res.json();
-      const items: SearchPRItem[] = data.items ?? [];
-      allPRs.push(...items);
-
-      hasMore = items.length === 100 && page < 10; // Safety cap at 1000 PRs
-      page++;
+    // GitHub Search API returns 422 when a query includes more than ~5 private org repos.
+    // Chunk repos and run one query per chunk, merging results.
+    const REPO_CHUNK_SIZE = 5;
+    const repoChunks: Array<typeof ghRepos> = [];
+    for (let i = 0; i < ghRepos.length; i += REPO_CHUNK_SIZE) {
+      repoChunks.push(ghRepos.slice(i, i + REPO_CHUNK_SIZE));
     }
 
-    const reviewQueuePromise = fetchReviewRequests(token, username, ghRepos, 100);
+    const searchIssues = async (q: string): Promise<SearchPRItem[]> => {
+      const results: SearchPRItem[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const url = `${GITHUB_API}/search/issues?q=${encodeURIComponent(q)}&per_page=100&page=${page}`;
+        const res = await fetch(url, { headers: headers(token) });
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          console.error(`[Sync] GitHub search failed (${res.status}): ${body}`);
+          break;
+        }
+        const data = await res.json();
+        const items: SearchPRItem[] = data.items ?? [];
+        results.push(...items);
+        hasMore = items.length === 100 && page < 10;
+        page++;
+      }
+      return results;
+    };
+
+    // Fetch all PRs (open + closed + merged) updated since cursor, one chunk at a time.
+    const allPRs: SearchPRItem[] = [];
+    for (const chunk of repoChunks) {
+      const repoFilter = chunk.map((r) => `repo:${r.org}/${r.name}`).join(" ");
+      const q = `type:pr author:${username} updated:>=${since} ${repoFilter}`.trim();
+      const items = await searchIssues(q);
+      allPRs.push(...items);
+    }
+
+    // fetchReviewRequests also uses the Search API — chunk repos for the same reason.
+    const reviewQueuePromise = (async () => {
+      const all: Awaited<ReturnType<typeof fetchReviewRequests>> = [];
+      for (const chunk of repoChunks) {
+        const items = await fetchReviewRequests(token, username, chunk, 100);
+        all.push(...items);
+      }
+      return all;
+    })();
 
     const incrementalPrepared = allPRs.map((pr) => preparePullForCache(pr));
 
@@ -167,11 +193,12 @@ export async function syncPullRequests(developerId: string): Promise<void> {
     // and idle open PRs retain accurate cached data (their metadata only changes on update).
     const openPrepared: ReturnType<typeof preparePullForCache>[] = [];
     if (!syncLog?.last_cursor) {
-      const openQ = `type:pr is:open author:${username}${repoFilter} sort:updated-desc`.trim();
-      const openUrl = `${GITHUB_API}/search/issues?q=${encodeURIComponent(openQ)}&per_page=30`;
-      const openRes = await fetch(openUrl, { headers: headers(token) });
-      const openItems: SearchPRItem[] = openRes.ok ? ((await openRes.json()).items ?? []) : [];
-      openPrepared.push(...openItems.map((pr) => preparePullForCache(pr)));
+      for (const chunk of repoChunks) {
+        const repoFilter = chunk.map((r) => `repo:${r.org}/${r.name}`).join(" ");
+        const openQ = `type:pr is:open author:${username} ${repoFilter}`.trim();
+        const openItems = await searchIssues(openQ);
+        openPrepared.push(...openItems.map((pr) => preparePullForCache(pr)));
+      }
     }
 
     const reviewQueue = await reviewQueuePromise;
